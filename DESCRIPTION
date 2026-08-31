@@ -1,0 +1,51 @@
+Package: ecoeval
+Title: Evaluate AI Extraction Accuracy Against a Human Gold Standard
+Version: 0.0.0.9000
+Authors@R: c(
+    person("Nathan", "Layman", , "n8.layman@gmail.com", role = c("aut", "cre"),
+           comment = c(ORCID = "0000-0003-2238-6584")))
+Description: Provides an interactive Shiny dashboard for measuring how
+    accurately an AI extraction pipeline performed against a human-curated
+    gold standard. Because two readers describe the same finding differently,
+    records must be aligned before they can be compared; ecoeval pairs records
+    using probabilistic record linkage, resolves near-matches with a cascade of
+    comparators ending in an LLM judge, and reports precision, recall, and
+    field-level accuracy. Designed to be run iteratively, surfacing signals
+    that distinguish model error from schema misfit.
+URL: https://n8layman.github.io/ecoeval/, https://github.com/n8layman/ecoeval
+BugReports: https://github.com/n8layman/ecoeval/issues
+License: GPL (>= 3)
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Imports:
+    shiny,
+    shinyjs,
+    shinyFiles,
+    DT,
+    fontawesome,
+    htmltools,
+    ggplot2,
+    plotly,
+    fastLink,
+    DBI,
+    RSQLite,
+    dplyr,
+    tibble,
+    jsonlite,
+    stringdist,
+    readr,
+    openxlsx,
+    rlang,
+    fs,
+    here
+Suggests:
+    ecoextract,
+    ecoreview,
+    ellmer,
+    readxl,
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
+Config/testthat/edition: 3

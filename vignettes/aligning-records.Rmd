@@ -1,0 +1,14 @@
+---
+title: "Aligning Records"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Aligning Records}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+Placeholder. See `docs/design.md`.

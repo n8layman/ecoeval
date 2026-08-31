@@ -1,0 +1,72 @@
+# History files
+.Rhistory
+.Rapp.history
+
+# Session Data files
+.RData
+.RDataTmp
+
+# User-specific files
+.Ruserdata
+
+# Example code in package build process
+*-Ex.R
+
+# Output files from R CMD build
+/*.tar.gz
+
+# Output files from R CMD check
+/*.Rcheck/
+
+# RStudio files
+.Rproj.user/
+*.Rproj
+
+# produced vignettes
+vignettes/*.html
+vignettes/*.pdf
+
+# OAuth2 token
+.httr-oauth
+
+# knitr and R markdown cache directories
+*_cache/
+/cache/
+
+# Temporary files created by R markdown
+*.utf8.md
+*.knit.md
+
+# R Environment Variables — NEVER COMMIT
+.Renviron
+.env
+.env.*
+# ...except the template, which holds key names and no values
+!.env.example
+
+# pkgdown site output (the site is deployed to the gh-pages branch).
+# pkgdown requires sole ownership of docs/ — keep hand-written docs elsewhere
+# (the design document lives at DESIGN.md in the repo root).
+docs/
+
+# RStudio Connect folder
+rsconnect/
+
+# Project-specific
+.claude/
+*.sqlite
+*.db
+*.db-wal
+*.db-shm
+*.log
+
+# Local scratch
+notes/
+scratch/
+
+**/.DS_Store
+.DS_Store
+
+# testthat debug artifacts
+tests/testthat/_problems/
+tests/testthat/testthat-problems.rds

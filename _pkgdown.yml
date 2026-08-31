@@ -1,0 +1,65 @@
+url: https://n8layman.github.io/ecoeval/
+
+template:
+  bootstrap: 5
+  bootswatch: flatly
+  includes:
+    after_body: >
+      <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+      <script>
+        mermaid.initialize({ startOnLoad: false, theme: "default" });
+        document.querySelectorAll("pre.mermaid").forEach(function(pre) {
+          var code = pre.querySelector("code");
+          var text = code ? code.textContent : pre.textContent;
+          var div = document.createElement("div");
+          div.className = "mermaid";
+          div.textContent = text;
+          pre.parentElement.replaceChild(div, pre);
+        });
+        mermaid.run();
+      </script>
+
+navbar:
+  bg: primary
+  structure:
+    left: [home, workflow, alignment, metrics, reference]
+    right: [search, github]
+  components:
+    home:
+      icon: fa-home
+      href: index.html
+      aria-label: Home
+    workflow:
+      text: Guide
+      href: articles/ecoeval-workflow.html
+    alignment:
+      text: Aligning Records
+      href: articles/aligning-records.html
+    metrics:
+      text: Metrics
+      href: articles/metrics.html
+    reference:
+      text: Reference
+      href: reference/index.html
+
+footer:
+  structure:
+    left: developed_by
+    right: ecoeval_footer
+  components:
+    ecoeval_footer:
+      text: "EcoEval - Measuring AI extraction accuracy against a gold standard"
+
+reference:
+  - title: App
+    desc: Launch and configure the evaluation dashboard
+    contents:
+      - run_eval_app
+
+articles:
+  - title: Guides
+    navbar: ~
+    contents:
+      - ecoeval-workflow
+      - aligning-records
+      - metrics
