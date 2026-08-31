@@ -52,9 +52,136 @@ footer:
 
 reference:
   - title: App
-    desc: Launch and configure the evaluation dashboard
+    desc: >
+      Launch the dashboard, or run the same evaluation without it. The app is a
+      shell over a library; everything it computes is a plain function over
+      data frames.
     contents:
       - run_eval_app
+      - evaluate_extraction
+
+  - title: Loading the inputs
+    desc: >
+      Four data inputs, symmetric across the two sources, plus the schema.
+      Paper lists widen scope; they do not change how anything is scored.
+    contents:
+      - read_table_any
+      - list_db_tables
+      - read_ecoextract_documents
+      - suggest_paper_column
+      - suggest_mapping
+      - prepare_records
+      - prepare_papers
+      - paper_set
+      - compute_scope
+      - coverage_warning
+
+  - title: The schema
+    desc: >
+      A required input. It drives comparator defaults, the enum conformance
+      check, and the default linkage-field suggestion.
+    contents:
+      - read_schema
+      - default_comparator
+      - default_comparator_config
+      - check_conformance
+      - unschematised_fields
+
+  - title: The comparator cascade
+    desc: >
+      Exact, then trimmed and case-insensitive, then fuzzy, then the LLM judge.
+      Each rung sees only what the previous could not resolve.
+    contents:
+      - compare_pair
+      - comparator_choices
+      - canonicalise
+      - similarity
+      - parse_date_loose
+      - score_cells
+      - apply_overrides
+      - empty_cells
+      - similarity_profile
+      - is_blank
+
+  - title: The LLM rungs
+    desc: >
+      Normalise per value before matching; judge per pair after. Verdicts are
+      cached so a run stays reproducible.
+    contents:
+      - make_judge
+      - judge_available
+      - default_judge_model
+      - normalize_values
+      - normalizer_choices
+      - estimate_judge_calls
+      - new_cache
+      - cache_as_list
+
+  - title: Alignment
+    desc: >
+      fastLink, blocked per paper, permissive -- no similarity floor. The model
+      is fitted once over the whole corpus and applied per block.
+    contents:
+      - align_records
+      - align_papers
+      - fit_linkage_model
+      - granularity_check
+      - identifiability_check
+      - ecoeval_seed
+
+  - title: Metrics
+    desc: >
+      One unified accounting over every record from both sides, matched or not.
+    contents:
+      - field_metrics
+      - record_metrics
+      - aggregate_metrics
+      - column_confusion
+      - fill_rates
+      - state_contributions
+      - state_colour
+      - progress_summary
+      - suspect_pairs
+
+  - title: Findings
+    desc: >
+      Output, not gates. Grouped by who acts on them -- the schema, the model,
+      or the gold standard.
+    contents:
+      - collect_findings
+      - source_consistency
+      - blocking_condition
+      - schema_patch
+
+  - title: Charts
+    contents:
+      - plot_column_accuracy
+      - plot_confusion
+      - plot_threshold
+      - plot_completeness
+      - plot_error_distribution
+      - plot_record_outcome
+      - ecoeval_palette
+
+  - title: Session and export
+    desc: >
+      The session artifact and the export bundle are the same object, so save,
+      restore, and download share one implementation.
+    contents:
+      - new_run_config
+      - read_run_config
+      - write_run_config
+      - capture_run_config
+      - restore_run_tables
+      - run_config_protos
+      - correction_count
+      - diff_runs
+      - export_bundle
+      - zip_bundle
+      - aligned_table
+      - aligned_table_long
+      - write_metrics_workbook
+      - bundle_readme
 
 articles:
   - title: Guides

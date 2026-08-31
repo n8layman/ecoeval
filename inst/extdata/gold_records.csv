@@ -1,0 +1,14 @@
+doi,bat_species_scientific_name,interaction_type,location_country,year_observed,sample_size,detection_method,observation_date,all_supporting_source_sentences,habitat_notes
+10.1000/p01,Eptesicus fuscus,roosting,USA,2019,24,direct observation,2019-06-14,The attic roost was occupied by big brown bats for the whole survey.,suburban attic
+10.1000/p01,Tadarida brasiliensis,predation,Mexico,2018,7,camera trap,2018-09-02,Moths were taken by free-tailed bats at the cave entrance.,limestone cave
+10.1000/p02,Lasiurus borealis,parasitism,Canada,2020,10,PCR,2020-05-11,Ten individuals were examined for ectoparasites.,riparian woodland
+10.1000/p03,Myotis lucifigus,roosting,USA,2017,40,direct observation,2017-07-30,Bridge expansion joints held a maternity colony of little brown bats.,concrete bridge
+10.1000/p04,Nycticeius humeralis,predation,USA,2021,3,camera trap,08/03/2021,Evening bats were filmed foraging over the pond after sunset.,farm pond
+10.1000/p05,tricolored bat,roosting,USA,2016,12,direct observation,2016-11-19,Hibernation surveys counted tricoloured bats in the adit.,abandoned mine
+10.1000/p06,Molossus molossus,commensalism,Panama,2019,5,direct observation,2019-04-22,Velvety free-tailed bats shared roost crevices with smaller species.,urban roof crevice
+10.1000/p08,Desmodus rotundus,parasitism,Brazil,2022,31,serology,2022-01-17,Vampire bats were observed feeding on cattle.,cattle pasture
+10.1000/p08,Artibeus lituratus,commensalism,Brazil,2022,4,direct observation,2022-01-18,Great fruit-eating bats fed at the same troughs.,cattle pasture
+10.1000/p09,Pipistrellus pipistrellus,roosting,United Kingdom,2020,35,direct observation,2020-06-01,The 2020 season counted 35 pipistrelles in the church roof.,church roof
+10.1000/p09,Pipistrellus pipistrellus,roosting,United Kingdom,2021,25,direct observation,2021-06-04,The 2021 season counted 25 pipistrelles in the same roost.,church roof
+10.1000/p10,Rousettus aegyptiacus,commensalism,Uganda,2018,15,PCR,2018-10-12,Egyptian fruit bats were swabbed at the cave entrance.,cave entrance
+10.1000/p10,Hipposideros caffer,predatoin,Uganda,2018,2,PCR,2018-10-13,Sundevall's roundleaf bat was also sampled.,cave entrance

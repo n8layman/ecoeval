@@ -11,4 +11,208 @@ vignette: >
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ```
 
-Placeholder. See `docs/design.md`.
+```{r setup}
+library(ecoeval)
+
+run <- evaluate_extraction(
+  ai     = system.file("extdata", "ai_records.csv",   package = "ecoeval"),
+  gold   = system.file("extdata", "gold_records.csv", package = "ecoeval"),
+  schema = system.file("extdata", "schema.json",      package = "ecoeval")
+)
+```
+
+## One unified accounting
+
+Computed over the **entire set** — every record from both sides, matched or not.
+Per column, each cell contributes:
+
+```{r}
+state_contributions()
+```
+
+Reading those states:
+
+| State                     | Grid colour | Meaning                                       |
+| ------------------------- | ----------- | --------------------------------------------- |
+| `agree`                   | green       | matched pair, values agree under the comparator |
+| `disagree`                | yellow      | matched pair, values disagree                 |
+| `ai_missing`              | yellow      | matched pair, the AI left it blank            |
+| `gold_missing`            | yellow      | matched pair, the human left it blank         |
+| `ai_only`                 | purple      | AI record with no counterpart                 |
+| `gold_only`               | orange      | gold record with no counterpart               |
+| `blank`                   | —           | both sides blank                              |
+
+A disagreement counts as **both** a false positive and a false negative. That's
+the standard multi-class treatment: a misclassification is a false positive for
+the value asserted and a false negative for the value missed.
+
+Cells blank on both sides are true negatives and drop out of precision and
+recall, because a field neither party filled in says nothing about extraction
+quality.
+
+## The property the accounting rests on
+
+A wrongly linked pair that disagrees on everything produces FP + FN per
+column — **exactly the same as leaving those rows unlinked**, where purple gives
+FP and orange gives FN.
+
+```{r}
+ai   <- tibble::tibble(.rid = "a1", .paper = "P", v = "alpha", w = "one")
+gold <- tibble::tibble(.rid = "g1", .paper = "P", v = "omega", w = "two")
+config <- default_comparator_config(fields = c("v", "w"))
+
+linked <- score_cells(
+  tibble::tibble(pair_id = "p1", paper = "P", ai_rid = "a1", gold_rid = "g1"),
+  ai, gold, config)
+
+unlinked <- score_cells(
+  tibble::tibble(pair_id = c("p1", "p2"), paper = "P",
+                 ai_rid = c("a1", NA), gold_rid = c(NA, "g1")),
+  ai, gold, config)
+
+identical(
+  field_metrics(linked)[, c("field", "tp", "fp", "fn")],
+  field_metrics(unlinked)[, c("field", "tp", "fp", "fn")]
+)
+```
+
+So linking earns nothing except where fields genuinely agree, and bad links
+cannot inflate field accuracy. **Field-level metrics are largely robust to
+alignment error.** Record-level metrics are not — pairing two records converts
+1 FP + 1 FN into 1 TP — which is exactly the judgment the human review exists
+for.
+
+## Two confusion matrices, both about extraction
+
+Plainly labelled. There is no third matrix about linkage quality; users
+shouldn't have to learn that distinction.
+
+**Records** — did the AI find the right rows?
+
+```{r}
+record_metrics(run$pairs)
+```
+
+**Fields** — did it fill them in correctly?
+
+```{r}
+field_metrics(run$cells)[, c("field", "tp", "fp", "fn", "n_scored", "accuracy")]
+```
+
+Sorted worst accuracy first, which is the triage order. But read it carefully: a
+column that is uniformly wrong has three possible causes and the tool can't tell
+them apart.
+
+1. **A misconfigured comparator** — exact matching on a date column with two
+   formats, or a fuzzy threshold set too tight. On a first run this is the most
+   likely explanation, and the cheapest to check.
+2. **An ambiguous field description** — the prompt didn't pin down what to put
+   there.
+3. **The model genuinely failing** on that field.
+
+Check them in that order. The chart tells you *where* to look, not why.
+
+## The two aggregates
+
+Two numbers, plain labels — no micro/macro jargon.
+
+```{r}
+aggregate_metrics(run$cells)
+```
+
+`overall_accuracy` weighs every scored cell the same; `column_mean_accuracy`
+weighs every column the same. They diverge when fill rates are uneven, and the
+gap is itself informative.
+
+## Column-level matrices
+
+The form adapts to the column's type, because a K×K matrix over thousands of
+species names is useless.
+
+**Enum, boolean, or low cardinality** → a true K×K, gold class by AI class, with
+an explicit `(not in schema)` row and column so out-of-enum values appear rather
+than being silently dropped. Those are among the most interesting cells on the
+chart.
+
+```{r}
+cc <- column_confusion(run$cells, "interaction_type", run$schema)
+cc$type
+subset(cc$matrix, n > 0)
+```
+
+**Free text or high cardinality** → 2×2 on presence and absence, with the
+populated-by-both cell **split into "correct" and "wrong value"**. That split is
+what makes it useful: it separates *didn't populate the field* from *populated
+it wrong*, which have entirely different causes.
+
+```{r}
+cc <- column_confusion(run$cells, "all_supporting_source_sentences", run$schema)
+cc$type
+cc$matrix
+```
+
+**Numeric or date** → presence and absence plus an error distribution.
+
+```{r}
+cc <- column_confusion(run$cells, "sample_size", run$schema)
+cc$errors
+```
+
+Each result carries `notes` — cautions such as one class dominating (accuracy is
+then trivially high and uninformative) or too few matched records to mean
+anything.
+
+## Fill rates
+
+Per-column fill rates for both sources, side by side. A field humans always
+populate and the AI rarely does is usually a field-description problem, not a
+model failure — which is why it lands in the *schema* group of the findings, not
+the *model* group.
+
+```{r}
+fill_rates(run$cells)
+```
+
+## Schema conformance is not folded into anything
+
+Validate both sides against the schema, warn, mark the offending cells, and stop
+there. Scoring treats both sides at face value.
+
+```{r}
+subset(run$conformance, source == "gold")
+```
+
+- **AI side** — an invalid value is simply a **true error**, scored as wrong like
+  any other. Structured output should have prevented it, so it's also worth
+  flagging as a pipeline problem, but it needs no special accounting.
+- **Gold side** — you go and fix your gold standard. Not something the tool
+  models.
+
+No ceiling arithmetic, no reclassification, no confirmation flow. The counts do
+the work: `commensalism` appearing three times is a category the schema is
+missing; `predatoin` appearing once is a typo. The two have opposite fixes.
+
+Schema violations are **marked, not coloured**, in the grid. Validity is
+orthogonal to match state, a cell can be both, and either side's value (or both)
+may be the offender. Fill carries agreement; the marker carries validity.
+
+## Honest reporting
+
+The dashboard distinguishes three progress states, because they mean different
+things:
+
+| State        | Meaning                                                  |
+| ------------ | -------------------------------------------------------- |
+| **Unjudged** | cheap comparator rungs only; contested cells unresolved  |
+| **Judged**   | the LLM settled the contested cells                      |
+| **Reviewed** | a person looked at it                                    |
+
+```{r}
+progress_summary(run$cells, run$scope$papers)
+```
+
+*"47 of 47 papers judged · 3 reviewed"* is an honest description of a fast-path
+result, and it tells a later reader exactly how the numbers were produced
+without editorialising about it. It travels with the export, in `README.txt`,
+alongside the scope statement and any active warnings — so the caveats don't
+live only on screen.

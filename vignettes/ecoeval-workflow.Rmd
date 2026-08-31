@@ -11,4 +11,211 @@ vignette: >
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ```
 
-Placeholder. See `docs/design.md`.
+You have two sets of results from the same papers: one the AI produced, one a
+person produced by hand. You want to know how well the AI did.
+
+You can't just lay the two tables side by side, because people — and AI — often
+describe the same thing in different ways. So ecoeval works in two steps. First
+it **pairs up the rows**, matching each AI row to the human row describing the
+same thing. Then it **scores the result**.
+
+This guide walks the whole thing. [Aligning
+records](aligning-records.html) covers why the pairing is the hard part;
+[Metrics](metrics.html) covers how the numbers are computed.
+
+## The five inputs
+
+Four data inputs, symmetric across the two sources, plus the schema:
+
+|          | Paper list       | Record list        |
+| -------- | ---------------- | ------------------ |
+| **AI**   | papers processed | records extracted  |
+| **Gold** | papers reviewed  | records recorded   |
+
+`schema.json` — the schema the AI extracted against — is a **required fifth
+input**. It drives comparator defaults, the enum conformance check, and the
+default linkage-field suggestion.
+
+The paper lists are optional. They **widen scope**; they don't change how
+anything is scored. Each one lets you see a case that was otherwise invisible:
+
+| List supplied | Papers it brings into scope        | What that lets you catch |
+| ------------- | ---------------------------------- | ------------------------ |
+| Gold          | Human reviewed, found nothing      | AI **over**-extraction   |
+| AI            | AI processed, found nothing        | AI **under**-extraction  |
+
+For an ecoextract database the AI paper list is free — it's the `documents`
+table, which knows every paper processed regardless of whether extraction
+produced records.
+
+## Running it
+
+```r
+library(ecoeval)
+
+# Launch and pick inputs in the app.
+run_eval_app()
+
+# Or supply them up front.
+run_eval_app(
+  ai          = "ecoextract_records.db",
+  gold        = "gold_standard.csv",
+  schema      = "ecoextract/schema.json",
+  gold_papers = "papers_reviewed.csv"
+)
+```
+
+The app is a wizard with a persistent progress rail. Stages are revisitable
+without redoing everything downstream:
+
+1. **Load** — the five inputs
+2. **Map metadata fields** — which column holds the DOI, the title, the year
+3. **Align papers** — sets scope
+4. **Map record fields** — column mapping, comparators, identity columns
+5. **Compare** — one paper at a time; alignment review *and* results on one screen
+6. **Dashboard** — aggregate metrics, updating as review progresses
+
+To try it without any data of your own, press **Use the bundled example** on the
+load screen. It reads the synthetic fixtures shipped with the package, each row
+of which exists to exercise a specific case the evaluation has to get right.
+
+## Without the app
+
+The app is a shell over a library. Everything it computes is a plain function
+over data frames, so an evaluation can be scripted:
+
+```{r}
+library(ecoeval)
+
+ex <- function(f) system.file("extdata", f, package = "ecoeval")
+
+run <- evaluate_extraction(
+  ai          = ex("ai_records.csv"),
+  gold        = ex("gold_records.csv"),
+  schema      = ex("schema.json"),
+  ai_papers   = ex("ai_papers.csv"),
+  gold_papers = ex("gold_papers.csv")
+)
+```
+
+Scope first — papers are a filter, not a scored entity:
+
+```{r}
+str(run$scope)
+```
+
+Then the numbers:
+
+```{r}
+aggregate_metrics(run$cells)
+record_metrics(run$pairs)
+```
+
+And the per-column picture, sorted worst first, which is the triage order:
+
+```{r}
+field_metrics(run$cells)[, c("field", "n_scored", "accuracy", "precision", "recall")]
+```
+
+## Two ways to use this, and neither is the shortcut
+
+**"How accurate is it?"** — press **Resolve all differences** on the dashboard.
+The judge runs across every scoped paper, the numbers fill in, and you never
+open a single paper. This is the common case.
+
+**"Why is it wrong?"** — walk the papers, read the mismatches, spot the patterns
+worth fixing before the next extraction run. This is what you do when you're
+iterating on the schema or the prompt rather than reporting a number.
+
+Skipping review means accepting the matcher's pairings. Field-level metrics are
+largely robust to that; record-level precision and recall are not. Worth
+knowing, not worth worrying about.
+
+The dashboard is honest about which path produced the numbers:
+
+```{r}
+progress_summary(run$cells, run$scope$papers)
+```
+
+`n_pending_cells` counts cells the cheap comparator rungs couldn't settle and
+the judge hasn't seen. They currently count as disagreements.
+
+## Findings
+
+Findings are **output, not gates**, grouped by who acts on them — the schema,
+the model, or the gold standard. Nothing here adjusts a metric.
+
+```{r}
+run$findings[, c("group", "finding")]
+```
+
+Only two conditions actually stop the app, because neither leaves anything to
+compare: zero paper overlap between the two sources, and no mappable fields
+between the two record sets.
+
+## Export
+
+The session artifact and the export bundle are the same object, so save,
+restore, and download share one implementation.
+
+```{r, eval = FALSE}
+export_bundle(
+  "ecoeval_run_2026-08-31",
+  cells  = run$cells,
+  pairs  = run$pairs,
+  config = capture_run_config(new_run_config(), comparators = run$config),
+  scope  = run$scope,
+  schema = run$schema
+)
+```
+
+```
+ecoeval_run_2026-08-31/
+  aligned_table.csv        one row per aligned record, mirrors the grid
+  aligned_table_long.csv   tidy: one row per record x field, for pivoting
+  metrics.xlsx             one sheet per field + summary sheet
+  findings.csv             findings, grouped schema / model / gold
+  schema_patch.json        proposed schema edits
+  plots/                   column accuracy, per-field confusion matrices (PNG)
+  run_config.json          mappings, comparators, linkage fields, judge verdict
+                           cache, every manual link/reject decision, scope
+  README.txt               what's here, scope statement, any active warnings
+```
+
+`run_config.json` is what makes a run reproducible. Reload it with
+`run_eval_app(run_config = "...")` and you are exactly where you were — manual
+link decisions and cached LLM verdicts included.
+
+## Iterating
+
+Two things make this an improvement tool rather than a report generator.
+
+**Runs are versioned and diffable.**
+
+```{r}
+before <- capture_run_config(new_run_config(),
+                             metrics = list(record_f1 = 0.71, interaction_type = 0.62))
+after  <- capture_run_config(new_run_config(),
+                             metrics = list(record_f1 = 0.78, interaction_type = 0.91))
+diff_runs(before, after)
+```
+
+**Schema findings emit an applicable patch, not prose.**
+
+```{r}
+patch <- schema_patch(run$conformance, NULL, run$cells, run$schema)
+patch$enum_additions
+```
+
+A value recurring many times is a category the schema is missing. A single one
+is a typo. The counts make the difference obvious, and the two have opposite
+fixes — so the patch proposes only the first.
+
+## Requirements
+
+- R >= 4.0
+- [ecoextract](https://github.com/n8layman/ecoextract) output, or any record
+  table plus the `schema.json` it was extracted against
+- An API key for the LLM judge — copy `.env.example` to `.env`. Without one the
+  cheap comparator rungs still run; contested cells are reported as unjudged
+  rather than silently scored wrong.

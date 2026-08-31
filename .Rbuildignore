@@ -13,3 +13,6 @@
 ^\.Rprofile$
 ^notes$
 ^DESIGN\.md$
+^data-raw$
+^\.markdownlint\.json$
+^LICENSE$

@@ -11,4 +11,205 @@ vignette: >
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ```
 
-Placeholder. See `docs/design.md`.
+```{r setup}
+library(ecoeval)
+ex <- function(f) system.file("extdata", f, package = "ecoeval")
+```
+
+Before any accuracy number means anything, we have to decide which AI row
+corresponds to which gold row. That is the core of the app, and it is why the
+human stays in the loop: a person looking at two rows side by side can tell they
+describe the same interaction even when the text doesn't match. An automated
+matcher often can't.
+
+## Scope: papers are a filter, not a scored entity
+
+**Papers: intersection. Records: union.** Scope is the papers present in both
+paper sets — each source's paper list when supplied, otherwise the papers
+appearing in its records. Within those papers, every record from both sides
+appears; some pair up, some don't.
+
+```{r}
+schema <- read_schema(ex("schema.json"))
+ai   <- prepare_records(read_table_any(ex("ai_records.csv")),   "doi", prefix = "a")
+gold <- prepare_records(read_table_any(ex("gold_records.csv")), "doi", prefix = "g")
+
+ai_papers   <- prepare_papers(read_table_any(ex("ai_papers.csv")),   "doi")
+gold_papers <- prepare_papers(read_table_any(ex("gold_papers.csv")), "doi")
+
+scope <- compute_scope(paper_set(ai, ai_papers), paper_set(gold, gold_papers))
+lengths(scope)
+```
+
+Papers outside the intersection are excluded, never penalised. A gold-only paper
+simply narrows the comparison set; it carries no warning.
+
+Paper alignment determines scope, not score. Its asymmetry is worth knowing: a
+*missed* paper match just shrinks the evaluation set, but a *wrong* paper match
+compares one paper's records against another's and produces garbage. That's what
+the paper-link review guards against.
+
+## The comparator cascade
+
+Comparison is a ladder, not a single test: **exact → normalized → fuzzy → LLM
+judge**. Each rung sees only what the previous couldn't resolve, so the
+expensive rungs run on a small minority of cells.
+
+```{r}
+compare_pair("predation", "predation", "fuzzy")$rung
+compare_pair("Predation ", "predation", "fuzzy")$rung
+compare_pair("Myotis lucifugus", "Myotis lucifigus", "fuzzy")$rung
+```
+
+A field's configured comparator names the **highest** rung the cascade may climb
+to, so it can't quietly accept more than you asked for:
+
+```{r}
+compare_pair("Predation", "predation", "exact")$agree
+compare_pair("Myotis lucifugus", "Myotis lucifigus", "normalized")$agree
+```
+
+Defaults come from the JSON Schema type — the only inference available without
+domain knowledge, and enough:
+
+```{r}
+schema$fields[, c("field", "type", "comparator")]
+```
+
+Without normalisation the first run is a wall of disagreement that is mostly
+formatting noise. Two of the defaults exist purely to absorb it:
+
+```{r}
+compare_pair("10", "10.0", "numeric")$agree
+compare_pair("2021-03-08", "08/03/2021", "date")$agree
+```
+
+That second one matters more than it looks. `strptime()` happily ignores
+trailing characters, so a naive parser reads `"05/01/2020"` under `"%Y/%m/%d"`
+as the year 5. `parse_date_loose()` accepts a format only when the parsed date
+round-trips back to the original text.
+
+## Two LLM-backed strategies, for different columns
+
+|                            | Mechanism                              | Cache key    | Best for                   |
+| -------------------------- | -------------------------------------- | ------------ | -------------------------- |
+| **Normalize-then-compare** | map both values to a canonical form    | per **value** | species names              |
+| **LLM judge**              | compare the pair, return verdict + why | per **pair**  | supporting sentences, prose |
+
+The judge **cannot move earlier** in the pipeline. Alignment evaluates every
+candidate pair within a paper — 5 AI records against 5 gold records is 25 pairs
+times N linkage fields of LLM calls just to build the comparison matrix.
+Normalisation is per value: 10 values, 10 calls, then compare cheaply.
+Normalisation scales to N; the judge would scale to N².
+
+So the order is:
+
+1. Pick linkage fields and comparators
+2. **Normalise the linkage fields** on both sides — per value, cached, a no-op
+   when no normalising comparator was assigned
+3. Run the matcher on the normalised values
+4. Score cells with the cheap rungs; the judge fires per paper, on paired rows
+   only, and only on cells the cheaper rungs couldn't resolve
+
+Two consequences: **display originals, compare normalised**, and **the collapse
+check runs on normalised values** — `"M. lucifugus"` and `"Myotis lucifugus"`
+should collapse together, and running it raw undercounts.
+
+With no API key configured, the judge rung reports its cells as *pending* rather
+than pretending to a verdict:
+
+```{r}
+res <- compare_pair("bats ate moths", "moths were taken by bats", "judge")
+c(agree = res$agree, rung = res$rung, pending = res$pending)
+```
+
+Verdicts are cached per pair, because LLM output varies between calls and a
+reproducible run needs them frozen rather than re-derived. The cache is written
+into `run_config.json`.
+
+## The matcher
+
+fastLink, blocked per paper, **permissive — no similarity floor**. It proposes
+pairings even when key identifiers disagree, and the human judges. Dropping a
+pair because the identifiers look wrong is precisely the decision the human
+should be making with the values in front of them.
+
+There is one wrinkle worth knowing about. fastLink's EM learns which fields
+discriminate *from the data it is given* — and a per-paper block holds a handful
+of records. On two records it will confidently pair the wrong ones. So ecoeval
+fits the model **once over every scoped record** and then applies it per paper:
+pooled estimation, blocked application.
+
+```{r}
+config  <- default_comparator_config(schema)
+linkage <- config$field[config$linkage]
+linkage
+
+paper_map <- tibble::tibble(ai_paper = scope$papers, gold_paper = scope$papers)
+pairs <- align_records(ai, gold, linkage, paper_map)
+table(pairs$kind)
+```
+
+fastLink also clusters string distances internally, and that clustering is
+randomly initialised — two identical calls could otherwise return different
+pairings. ecoeval pins the seed (see `ecoeval_seed()`), restoring the caller's
+RNG state afterwards, so a run is reproducible without disturbing anything else
+in your session.
+
+**Matching is 1:1.** Leftovers on either side are false positives and false
+negatives, because that is what they are. An extra AI record *is* a false
+positive; whether it came from a hallucination or a dedup failure is a diagnosis
+you make from the collapse warning, not something the metric needs to model.
+
+## The three operations
+
+At the **row** level you fix the pairing — reject a link, or link two orphans.
+At the **cell** level you fix the verdict — assert that two values really do mean
+the same thing, or really don't.
+
+**Linking matters more than rejecting.** Rejection can only make the alignment
+sparser. The pairs a matcher misses are exactly the ones whose identifiers
+disagree — and those are the ones a human can recognise as the same entity.
+Without manual linking you could only correct in one direction.
+
+All three recompute every metric immediately, and all three persist in
+`run_config.json`. A hand-tuned result should say so:
+
+```{r}
+correction_count(
+  rejected  = data.frame(ai_rid = character(0), gold_rid = character(0)),
+  added     = data.frame(ai_rid = "a1", gold_rid = "g1"),
+  overrides = data.frame(pair_id = c("p1", "p2"), field = "x", agree = TRUE)
+)
+```
+
+## When to review by hand
+
+You don't have to check its work row by row. But a batch pass knows which pairs
+look wrong, which turns "review all 47 papers or none" into "look at these
+three":
+
+```{r}
+cells <- score_cells(pairs, ai, gold, config)
+suspect_pairs(cells, linkage)
+```
+
+Two cheap signals, both strong. A pair that agrees on **nothing** is almost
+certainly two unrelated records the matcher joined. A pair that disagrees on
+every **identity column** is the subtler case: it may agree on incidentals like
+country and year while the fields that establish which record this actually *is*
+all disagree.
+
+## Granularity: do the two datasets agree what a record is?
+
+Group the gold records by the chosen linkage fields within each paper and count
+collapses. If many rows collapse together, the human distinguished records by
+something the key doesn't capture.
+
+```{r}
+granularity_check(gold, linkage, "gold")
+```
+
+Two gold rows in that paper differ only by year, which isn't in the identity
+key. Add a field and try again — or accept that the two datasets are counting
+different things, which is itself a finding.

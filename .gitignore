@@ -59,6 +59,9 @@ rsconnect/
 *.db-wal
 *.db-shm
 *.log
+# ...except the synthetic fixture database, which the tests and the bundled
+# example both read. Rebuild it with data-raw/make_fixtures.R.
+!inst/extdata/*.db
 
 # Local scratch
 notes/

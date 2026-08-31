@@ -10,6 +10,8 @@ run_eval_app(
   schema = NULL,
   ai_papers = NULL,
   gold_papers = NULL,
+  run_config = NULL,
+  launch.browser = TRUE,
   ...
 )
 }
@@ -28,6 +30,12 @@ processed" / "papers reviewed") as distinct from records found. For an
 ecoextract database \code{ai_papers} is read from the \code{documents} table.
 Supplying these widens scope -- see \code{DESIGN.md}.}
 
+\item{run_config}{Optional path to a \code{run_config.json} from an earlier
+session. Reload it and you are exactly where you were -- mappings, manual
+link decisions, and cached LLM verdicts included.}
+
+\item{launch.browser}{Passed to \code{\link[shiny:runApp]{shiny::runApp()}}.}
+
 \item{...}{Reserved.}
 }
 \value{
@@ -37,4 +45,23 @@ Runs the Shiny application; called for its side effect.
 Evaluates AI extraction output against a human gold standard. All arguments
 are optional at launch -- the app collects whatever is missing -- but a
 schema must be supplied before the comparison stage.
+}
+\details{
+The app is a shell over a library. Everything it computes is available as
+plain functions over data frames (\code{\link[=read_schema]{read_schema()}}, \code{\link[=align_records]{align_records()}},
+\code{\link[=score_cells]{score_cells()}}, \code{\link[=field_metrics]{field_metrics()}}, \code{\link[=export_bundle]{export_bundle()}}), so an evaluation can
+be scripted without launching anything.
+}
+\examples{
+\dontrun{
+# Launch and pick inputs in the app.
+run_eval_app()
+
+# Or supply them up front.
+run_eval_app(
+  ai     = system.file("extdata", "ai_records.csv", package = "ecoeval"),
+  gold   = system.file("extdata", "gold_records.csv", package = "ecoeval"),
+  schema = system.file("extdata", "schema.json", package = "ecoeval")
+)
+}
 }

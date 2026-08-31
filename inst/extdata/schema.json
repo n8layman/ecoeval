@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Bat host-pathogen interaction records",
+  "type": "object",
+  "properties": {
+    "records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "x-unique-fields": [
+          "bat_species_scientific_name",
+          "interaction_type"
+        ],
+        "required": [
+          "bat_species_scientific_name",
+          "interaction_type"
+        ],
+        "properties": {
+          "bat_species_scientific_name": {
+            "type": "string",
+            "description": "Accepted scientific binomial of the bat, Genus species."
+          },
+          "interaction_type": {
+            "type": "string",
+            "description": "The kind of interaction reported.",
+            "enum": [
+              "predation",
+              "roosting",
+              "parasitism",
+              "competition"
+            ]
+          },
+          "location_country": {
+            "type": "string",
+            "description": "Country in which the observation was made."
+          },
+          "year_observed": {
+            "type": "integer",
+            "description": "Four-digit year of the observation."
+          },
+          "sample_size": {
+            "type": "number",
+            "description": "Number of individuals observed."
+          },
+          "detection_method": {
+            "type": "string",
+            "description": "How the interaction was detected.",
+            "enum": [
+              "direct observation",
+              "PCR",
+              "serology",
+              "camera trap"
+            ]
+          },
+          "observation_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Date of the observation."
+          },
+          "all_supporting_source_sentences": {
+            "type": "string",
+            "description": "Verbatim sentences from the paper supporting this record."
+          }
+        }
+      }
+    }
+  }
+}

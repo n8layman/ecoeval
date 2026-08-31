@@ -82,9 +82,35 @@ run_eval_app(
 
 ## Status
 
-Early development. See [`DESIGN.md`](DESIGN.md) for the full design —
-including a **Deliberately out of scope** section recording what was considered
-and cut, and why.
+Working. The evaluation runs end to end — load, align papers, align records,
+score, read the numbers, export the bundle. The LLM rungs (the normalising
+comparator and the judge) need an API key; without one the cheap comparator
+rungs still run and contested cells are reported as *unjudged* rather than
+silently scored wrong.
+
+See [`DESIGN.md`](DESIGN.md) for the full design — including a **Deliberately
+out of scope** section recording what was considered and cut, and why.
+
+### Scripting it
+
+The app is a shell over a library. Everything it computes is a plain function
+over data frames, so an evaluation can be run without launching anything:
+
+```r
+run <- ecoeval::evaluate_extraction(
+  ai     = "ecoextract_records.db",
+  gold   = "gold_standard.csv",
+  schema = "ecoextract/schema.json"
+)
+
+ecoeval::aggregate_metrics(run$cells)
+ecoeval::field_metrics(run$cells)   # sorted worst first -- the triage order
+run$findings                        # grouped schema / model / gold
+```
+
+To see it work with no data of your own, press **Use the bundled example** on
+the load screen, or point the arguments at the synthetic fixtures in
+`inst/extdata/`.
 
 ## Requirements
 

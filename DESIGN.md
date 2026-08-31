@@ -863,51 +863,76 @@ Tracked as issues on
 carries the decisions relevant to it, so it can be worked without reading this
 whole document — but the reasoning behind those decisions is here.
 
-**Done or in progress**
+**Design and scaffold**
 
 | # | Issue | Section | State |
 |---|---|---|---|
 | [1](https://github.com/n8layman/ecoeval/issues/1) | Port the design document into the repo | *this file* | done |
-| [2](https://github.com/n8layman/ecoeval/issues/2) | Package scaffold | Architecture | scaffolded — `DESCRIPTION`, `_pkgdown.yml`, `README.md`, `.Rprofile`, `.gitignore`, `.env.example`, entry-point stub |
+| [2](https://github.com/n8layman/ecoeval/issues/2) | Package scaffold | Architecture | done |
 
 **Core pipeline — build in this order, each depends on the last**
 
-| # | Issue | Section |
-|---|---|---|
-| [3](https://github.com/n8layman/ecoeval/issues/3) | Load the five inputs | Inputs |
-| [4](https://github.com/n8layman/ecoeval/issues/4) | Pre-flight consistency checks | Schema conformance; Findings |
-| [5](https://github.com/n8layman/ecoeval/issues/5) | Metadata mapping + paper alignment (sets scope) | Scope; Workflow 2–3 |
-| [6](https://github.com/n8layman/ecoeval/issues/6) | Record field mapping, columns, comparator config | Stage 4 detail |
-| [7](https://github.com/n8layman/ecoeval/issues/7) | Comparator cascade | The cascade; Where each rung runs |
-| [8](https://github.com/n8layman/ecoeval/issues/8) | Record alignment — fastLink blocked per paper | The matcher; One-to-one only |
-| [9](https://github.com/n8layman/ecoeval/issues/9) | Metrics engine | Metrics |
+| # | Issue | Section | State |
+|---|---|---|---|
+| [3](https://github.com/n8layman/ecoeval/issues/3) | Load the five inputs | Inputs | done — `io.R`, `mod_load.R` |
+| [4](https://github.com/n8layman/ecoeval/issues/4) | Pre-flight consistency checks | Schema conformance; Findings | done — `schema.R`, `findings.R` |
+| [5](https://github.com/n8layman/ecoeval/issues/5) | Metadata mapping + paper alignment (sets scope) | Scope; Workflow 2–3 | done — `mod_map_metadata.R`, `mod_align_papers.R` |
+| [6](https://github.com/n8layman/ecoeval/issues/6) | Record field mapping, columns, comparator config | Stage 4 detail | done — `mod_map_records.R` |
+| [7](https://github.com/n8layman/ecoeval/issues/7) | Comparator cascade | The cascade; Where each rung runs | done — `comparators.R`, `judge.R`; LLM rungs unexercised against a live API |
+| [8](https://github.com/n8layman/ecoeval/issues/8) | Record alignment — fastLink blocked per paper | The matcher; One-to-one only | done — `alignment.R` |
+| [9](https://github.com/n8layman/ecoeval/issues/9) | Metrics engine | Metrics | done — `metrics.R` |
 
 **UI**
 
-| # | Issue | Section |
-|---|---|---|
-| [10](https://github.com/n8layman/ecoeval/issues/10) | Comparison grid — one paper at a time | Stage 5 |
-| [11](https://github.com/n8layman/ecoeval/issues/11) | The three manual operations | The three operations |
-| [12](https://github.com/n8layman/ecoeval/issues/12) | "Resolve all differences" — batch judge | Two ways to use this |
-| [13](https://github.com/n8layman/ecoeval/issues/13) | Dashboard: confusion matrices and charts | Metrics; Charts worth borrowing |
+| # | Issue | Section | State |
+|---|---|---|---|
+| [10](https://github.com/n8layman/ecoeval/issues/10) | Comparison grid — one paper at a time | Stage 5 | done — `mod_compare.R` |
+| [11](https://github.com/n8layman/ecoeval/issues/11) | The three manual operations | The three operations | done |
+| [12](https://github.com/n8layman/ecoeval/issues/12) | "Resolve all differences" — batch judge | Two ways to use this | done — needs an API key to exercise |
+| [13](https://github.com/n8layman/ecoeval/issues/13) | Dashboard: confusion matrices and charts | Metrics; Charts worth borrowing | done — `mod_dashboard.R`, `plots.R` |
 
 **Output and iteration**
 
-| # | Issue | Section |
-|---|---|---|
-| [14](https://github.com/n8layman/ecoeval/issues/14) | Session persistence and export bundle | Export |
-| [15](https://github.com/n8layman/ecoeval/issues/15) | Run-over-run diff and schema patch | Iteration |
+| # | Issue | Section | State |
+|---|---|---|---|
+| [14](https://github.com/n8layman/ecoeval/issues/14) | Session persistence and export bundle | Export | done — `session.R`, `export.R` |
+| [15](https://github.com/n8layman/ecoeval/issues/15) | Run-over-run diff and schema patch | Iteration | done — `diff_runs()`, `schema_patch()` |
 
-### Suggested first slice
+### Two things the build learned
 
-The shortest path to something demonstrable is **3 → 5 → 6 → 8 → 9 → 10**,
-skipping the LLM rungs entirely at first: exact and fuzzy comparators only, no
-normalizer, no judge. That gets a working grid with real numbers and proves the
-alignment approach on actual data. Add #7's LLM rungs and #12's batch path once
-the shape is right, since they're the parts that cost money to iterate on.
+Both are in the code with comments, and both are worth knowing before touching
+the matcher.
 
-Build `metrics.R`, `comparators.R`, and `schema.R` as **pure functions over data
-frames**, unit-tested without Shiny, before wiring any UI to them.
+**The linkage model must be fitted over the whole corpus, then applied per
+block.** fastLink's EM learns which fields discriminate *from the data it is
+given*, and a per-paper block holds a handful of records. Fitting per paper, it
+will confidently pair the wrong two records out of two — on the fixtures it
+paired a species that matched exactly against one that did not, because the
+other linkage field happened to near-match. `fit_linkage_model()` estimates once
+over every scoped record; `link_block()` applies that model per paper.
+
+**fastLink is not deterministic.** It clusters string-distance values
+internally and that clustering is randomly initialised, so two identical calls
+returned different pairings. `run_config.json` promises reproducibility, so
+`ecoeval_seed()` pins the seed for every call into fastLink, restoring the
+caller's RNG state afterwards.
+
+### Departures from this document, and why
+
+* **Free-text columns default to `judge`, not `fuzzy`.** The comparator table
+  says free text gets fuzzy, but the cascade section names supporting sentences
+  as the motivating case for the judge. Defaulting to `judge` satisfies both:
+  the cascade still runs exact, normalized and fuzzy first, so nothing costs
+  money until they have failed, and a run with no API key reports those cells as
+  *unjudged* rather than scoring reworded prose as wrong.
+* **A blank on one side of a matched pair is not a full disagreement.** The
+  accounting table says yellow contributes FP + FN, but the purple and orange
+  rows both carry the qualifier "with a value". Applying it consistently: a pair
+  where the AI is blank and the gold has a value contributes FN only, and the
+  reverse contributes FP only. Both still render yellow.
+* **Triage also flags pairs whose identity columns all disagree**, not only
+  pairs that agree on nothing. The narrower rule missed a genuinely mispaired
+  record in the fixtures that happened to agree on country and year.
 
 ---
 

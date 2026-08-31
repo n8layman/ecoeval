@@ -1,0 +1,13 @@
+doi,bat_species_scientific_name,interaction_type,location_country,year_observed,sample_size,detection_method,observation_date,all_supporting_source_sentences
+10.1000/p01,Eptesicus fuscus,roosting,United States,2019,24,direct observation,2019-06-14,Big brown bats roosted in the attic throughout the survey period.
+10.1000/p01,Tadarida brasiliensis,predation,Mexico,2018,7,camera trap,2018-09-02,Free-tailed bats were observed taking moths at the cave mouth.
+10.1000/p02,Lasiurus borealis,parasitism,Canada,2020,10,PCR,2020-05-11,Ectoparasite loads were quantified for ten captured individuals.
+10.1000/p03,Myotis lucifugus,roosting,United States,2017,40,direct observation,2017-07-30,Little brown bats occupied the bridge expansion joints.
+10.1000/p04,Nycticeius humeralis,predation,United States,2021,3,camera trap,2021-03-08,Evening bats foraged over the pond at dusk.
+10.1000/p05,Perimyotis subflavus,roosting,United States,2016,12,NA,2016-11-19,Tricoloured bats were counted in the mine adit during hibernation surveys.
+10.1000/p06,Molossus molossus,competition,Panama,2019,5,NA,2019-04-22,Velvety free-tailed bats displaced smaller species from roost crevices.
+10.1000/p07,Artibeus jamaicensis,roosting,Costa Rica,2015,9,NA,2015-08-05,Jamaican fruit bats were recorded in tent roosts.
+10.1000/p07,Carollia perspicillata,predation,Costa Rica,2015,2,NA,2015-08-06,Seba's short-tailed bat visited Piper infructescences.
+10.1000/p08,Desmodus rotundus,parasitism,Brazil,2022,31,serology,2022-01-17,Common vampire bats fed on cattle at the study ranch.
+10.1000/p09,Pipistrellus pipistrellus,roosting,United Kingdom,2020,60,direct observation,2020-06-01,Common pipistrelles used the church roof across both survey seasons.
+10.1000/p10,Rousettus aegyptiacus,predation,Uganda,2018,15,PCR,2018-10-12,Egyptian fruit bats were sampled at the cave entrance.
