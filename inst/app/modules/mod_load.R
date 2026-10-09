@@ -231,8 +231,8 @@ mod_load_server <- function(id, rv) {
         "What was read",
         NULL,
         div(style = "display:flex; gap:22px;",
-            summarise_side(rv$ai_raw, rv$ai_papers_raw, "AI"),
-            summarise_side(rv$gold_raw, rv$gold_papers_raw, "Gold standard"))
+            summarise_side(rv$ai_raw, rv$ai_papers_raw, lab()$ai),
+            summarise_side(rv$gold_raw, rv$gold_papers_raw, lab()$gold))
       )
     })
   })

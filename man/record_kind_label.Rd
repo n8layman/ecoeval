@@ -20,5 +20,5 @@ A character vector the same length.
 shown.
 }
 \examples{
-record_kind_label(c("matched", "gold only"), side_labels(gold = "Reference"))
+record_kind_label(c("matched", "gold only"), side_labels(gold = "Gold standard"))
 }

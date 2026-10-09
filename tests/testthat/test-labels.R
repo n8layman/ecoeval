@@ -2,7 +2,7 @@
 
 test_that("side labels default to AI and gold standard, and validate", {
   l <- side_labels()
-  expect_equal(c(l$ai, l$gold), c("AI", "Gold standard"))
+  expect_equal(c(l$ai, l$gold), c("Extraction", "Reference"))
   expect_false(l$neutral)
   expect_error(side_labels(ai = ""), "non-empty")
   expect_error(as_side_labels(c(left = "x")), "side_labels")
@@ -27,7 +27,7 @@ test_that("use_side_labels sets the session default and gives back the old one",
   expect_equal(current_labels()$ai, "Parser")
   expect_equal(outcome_labels()[["only_gold"]], "Filed form only (FN)")
   use_side_labels(NULL)
-  expect_equal(current_labels()$ai, "AI")
+  expect_equal(current_labels()$ai, "Extraction")
 })
 
 test_that("plots, tables, findings and README use the labels; metrics do not change", {

@@ -284,7 +284,7 @@ test_that("clicking a cell shows both values and both sets of quotes", {
   html <- as.character(cell_modal_body(cells, d$pair_id, "location_country",
                                        evidence = ev))
 
-  expect_true(grepl("Gold standard", html))
+  expect_true(grepl("Reference", html))
   expect_true(grepl("Supporting sentences", html))
   # The quoted text itself, from both sides, not just the labels.
   quote <- cells[cells$pair_id == d$pair_id & cells$field == ev, ]
