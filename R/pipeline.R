@@ -63,8 +63,9 @@ is_db_path <- function(x) {
 #' @param ai_table,gold_table Table names, for database input.
 #'
 #' @return A list with `schema`, `ai_raw`, `gold_raw`, `ai_papers_raw`,
-#'   `gold_papers_raw`, and `inputs` (the paths, for the run configuration;
-#'   `NULL` where a data frame was supplied).
+#'   `gold_papers_raw`, `documents` (the OCR text from an ecoextract database,
+#'   or `NULL`; see [read_ecoextract_texts()]), and `inputs` (the paths, for
+#'   the run configuration; `NULL` where a data frame was supplied).
 #' @export
 load_inputs <- function(ai, gold, schema, ai_papers = NULL, gold_papers = NULL,
                         ai_table = NULL, gold_table = NULL) {
@@ -94,6 +95,7 @@ load_inputs <- function(ai, gold, schema, ai_papers = NULL, gold_papers = NULL,
     gold_raw = read(gold, gold_table),
     ai_papers_raw = ai_pap,
     gold_papers_raw = read(gold_papers),
+    documents = if (is_db_path(ai)) read_ecoextract_texts(ai),
     inputs = list(
       ai = path_of(ai), ai_table = ai_table,
       gold = path_of(gold), gold_table = gold_table,
@@ -177,7 +179,8 @@ choose_paper_keys <- function(tables, paper_key = NULL, strategy = NULL) {
 #' @param keys The result of [choose_paper_keys()].
 #'
 #' @return A list with `ai`, `gold`, `ai_papers`, `gold_papers` (canonical, or
-#'   `NULL`), `metadata_fields` (the paper metadata both lists carry), and
+#'   `NULL`), `metadata_fields` (the paper metadata both lists carry),
+#'   `documents` (each AI paper's text, from [document_texts()]), and
 #'   `warnings`.
 #' @export
 place_papers <- function(loaded, keys) {
@@ -218,6 +221,7 @@ place_papers <- function(loaded, keys) {
 
   list(ai = ai, gold = gold, ai_papers = ai_papers, gold_papers = gold_papers,
        metadata_fields = intersect(names(ai_meta), names(gold_meta)),
+       documents = document_texts(loaded$documents, keys$ai),
        warnings = warnings %||% character(0))
 }
 

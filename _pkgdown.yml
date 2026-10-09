@@ -104,6 +104,15 @@ reference:
       - compute_scope
       - coverage_warning
 
+  - title: The source documents
+    desc: >
+      An ecoextract database keeps each paper's OCR text. The cell pop-up shows
+      where each side's value and quote appear in it.
+    contents:
+      - read_ecoextract_texts
+      - document_texts
+      - document_passages
+
   - title: What identifies a paper
     desc: >
       Detected rather than asked for, in a fixed priority order: DOI, file

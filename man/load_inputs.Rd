@@ -25,8 +25,9 @@ load_inputs(
 }
 \value{
 A list with \code{schema}, \code{ai_raw}, \code{gold_raw}, \code{ai_papers_raw},
-\code{gold_papers_raw}, and \code{inputs} (the paths, for the run configuration;
-\code{NULL} where a data frame was supplied).
+\code{gold_papers_raw}, \code{documents} (the OCR text from an ecoextract database,
+or \code{NULL}; see \code{\link[=read_ecoextract_texts]{read_ecoextract_texts()}}), and \code{inputs} (the paths, for
+the run configuration; \code{NULL} where a data frame was supplied).
 }
 \description{
 Each record set and paper list may be a path (anything \code{\link[=read_table_any]{read_table_any()}}

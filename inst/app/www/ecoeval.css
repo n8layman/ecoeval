@@ -94,6 +94,23 @@ table.dataTable thead th { font-size: 11.5px; font-weight: 620; }
 .eco-modal-value .k { font-size: 10.5px; text-transform: uppercase;
                       letter-spacing: .04em; color: var(--eco-muted); }
 
+/* ---- the source document in the cell modal ---- */
+
+.eco-doc-key { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 8px;
+               font-size: 11.5px; }
+.eco-doc-passage { white-space: pre-wrap; background: #fff; border-left: 3px solid var(--eco-line);
+                   padding: 6px 10px; margin: 6px 0; font-size: 12.5px; line-height: 1.5; }
+.eco-doc-full { white-space: pre-wrap; max-height: 420px; overflow-y: auto; background: #fff;
+                padding: 8px 10px; margin-top: 6px; font-size: 12.5px; line-height: 1.5; }
+.eco-doc details { margin-top: 8px; }
+.eco-doc summary { cursor: pointer; font-size: 12.5px; color: var(--eco-muted); }
+.eco-mark { padding: 0 2px; border-radius: 3px; color: inherit; }
+.eco-mark-ai { background: rgba(44, 127, 184, .22); box-shadow: inset 0 -2px 0 var(--eco-ai); }
+.eco-mark-gold { background: rgba(122, 81, 149, .22); box-shadow: inset 0 -2px 0 var(--eco-gold); }
+.eco-mark-both { background: rgba(47, 158, 91, .22); box-shadow: inset 0 -2px 0 var(--eco-green); }
+.eco-mark-ai_quote { background: transparent; border-bottom: 2px dashed var(--eco-ai); border-radius: 0; }
+.eco-mark-gold_quote { background: transparent; border-bottom: 2px dashed var(--eco-gold); border-radius: 0; }
+
 /* ---- the confusion matrix under the heatmap ---- */
 
 .eco-cm { border-collapse: separate; border-spacing: 6px; margin-top: 10px; }

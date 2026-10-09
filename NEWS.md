@@ -46,6 +46,16 @@
   is how it reads under the labels. Table column names in exports stay
   `ai_<field>` and `gold_<field>`.
 
+## The source document in the cell pop-up
+
+* When the AI side is an ecoextract database, the cell pop-up shows what the
+  paper itself says: the passages where each side's value and quoted sentence
+  appear in the OCR text, highlighted by side, with a note for a value the
+  text does not contain. The whole document and the extraction's reasoning
+  fold away beneath. `read_ecoextract_texts()`, `document_texts()`, and
+  `document_passages()` do the work, and the fixture database now carries
+  synthetic OCR text.
+
 ## Fixes
 
 * The interactive record heatmap's legend shows the outcome labels -- and so

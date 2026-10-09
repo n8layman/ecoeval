@@ -256,6 +256,44 @@ gold_papers <- tibble(
   year = c(2019L, 2020L, 2017L, 2021L, 2016L, 2019L, 2015L, 2022L, 2021L, 2018L, 2014L)
 )
 
+# ---- OCR text ---------------------------------------------------------------
+# The documents table of a real ecoextract database carries each paper's OCR
+# markdown and the extraction's reasoning. Synthetic text built from the gold
+# standard's values -- what the paper "says" -- plus the sentences each side
+# quoted, so a cell's values and quotes can be found in it, and an AI value
+# the paper does not support cannot.
+
+ai_documents <- function(papers, ai, gold) {
+  say <- function(r) {
+    sprintf(paste("We recorded %s (%s) in %s during %s, with %s individuals",
+                  "examined by %s."),
+            r$bat_species_scientific_name, r$interaction_type, r$location_country,
+            r$year_observed, r$sample_size, r$detection_method)
+  }
+  text_for <- function(doi, title) {
+    g <- gold[gold$doi == doi, , drop = FALSE]
+    a <- ai[ai$doi == doi, , drop = FALSE]
+    body <- c(
+      vapply(seq_len(nrow(g)), function(i) say(g[i, ]), character(1)),
+      stats::na.omit(unique(c(g$all_supporting_source_sentences,
+                              a$all_supporting_source_sentences)))
+    )
+    paste0("# ", title, "\n\n## Methods\n\nField surveys were carried out ",
+           "at each site.\n\n## Results\n\n",
+           if (length(body)) paste(body, collapse = "\n\n")
+           else "No interactions were observed.")
+  }
+  tibble(
+    document_id = seq_len(nrow(papers)),
+    file_name = paste0(sub("/", "_", papers$doi), ".pdf"),
+    doi = papers$doi, title = papers$title, year = papers$year,
+    document_content = mapply(text_for, papers$doi, papers$title, USE.NAMES = FALSE),
+    extraction_reasoning = sprintf(
+      "Read the results section of '%s' and extracted one record per interaction.",
+      papers$title)
+  )
+}
+
 # ---- write -----------------------------------------------------------------
 
 readr::write_csv(ai, file.path(out_dir, "ai_records.csv"))
@@ -268,7 +306,7 @@ db_path <- file.path(out_dir, "ai_records.db")
 if (file.exists(db_path)) unlink(db_path)
 con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
 DBI::dbWriteTable(con, "records", as.data.frame(ai))
-DBI::dbWriteTable(con, "documents", as.data.frame(ai_papers))
+DBI::dbWriteTable(con, "documents", as.data.frame(ai_documents(ai_papers, ai, gold)))
 DBI::dbDisconnect(con)
 
 message("Fixtures written to ", out_dir)

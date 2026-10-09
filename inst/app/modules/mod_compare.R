@@ -26,13 +26,105 @@ original <- function(cells, side) {
   cells[[paste0(side, "_original")]] %||% cells[[paste0(side, "_value")]]
 }
 
+# Text with each match wrapped in a <mark>, coloured by whose value it is. A
+# match that overlaps one already marked is left plain rather than nested.
+# Built as one string: the passages are shown with their line breaks kept, and
+# the newlines and indentation htmltools puts between tags would show as gaps.
+highlight_text <- function(text, marks) {
+  esc <- function(x) htmltools::htmlEscape(x)
+  if (!NROW(marks)) return(HTML(esc(text)))
+  marks <- marks[order(marks$start, -marks$end), , drop = FALSE]
+  out <- character(0)
+  pos <- 1L
+  for (i in seq_len(nrow(marks))) {
+    s <- marks$start[[i]]
+    e <- marks$end[[i]]
+    if (s < pos) next
+    if (s > pos) out <- c(out, esc(substr(text, pos, s - 1L)))
+    out <- c(out, sprintf('<mark class="eco-mark eco-mark-%s">%s</mark>',
+                          marks$side[[i]], esc(substr(text, s, e))))
+    pos <- e + 1L
+  }
+  if (pos <= nchar(text)) out <- c(out, esc(substr(text, pos, nchar(text))))
+  HTML(paste(out, collapse = ""))
+}
+
+# What the paper itself says about this cell: the passages where either side's
+# value, or the sentence it quoted, appears, with a note for any value the text
+# does not contain -- the usual sign the extraction made it up, or that the OCR
+# lost it. The whole text and the extraction's reasoning fold away beneath.
+document_section <- function(document, row, quote_row = NULL, labels = lab()) {
+  if (is.null(document) || !NROW(document) ||
+      isTRUE(ecoeval::is_blank(document$text[[1L]]))) {
+    return(NULL)
+  }
+  text <- document$text[[1L]]
+  ai <- original(row, "ai")
+  gold <- original(row, "gold")
+  # The same value on both sides is one thing to find, marked as both.
+  same <- !is.na(ai) && !is.na(gold) &&
+    identical(ecoeval::canonicalise(ai), ecoeval::canonicalise(gold))
+  terms <- if (same) c(both = ai) else c(ai = ai, gold = gold)
+  if (!is.null(quote_row) && nrow(quote_row)) {
+    terms <- c(terms, ai_quote = original(quote_row, "ai")[[1L]],
+               gold_quote = original(quote_row, "gold")[[1L]])
+  }
+  terms <- terms[!is.na(terms) & nzchar(trimws(terms))]
+  if (!length(terms)) return(NULL)
+
+  res <- ecoeval::document_passages(text, terms)
+  value_sides <- intersect(names(terms), c("ai", "gold", "both"))
+  missing <- value_sides[!res$found[value_sides]]
+  who <- c(ai = labels$ai, gold = labels$gold, both = "Both sides'")
+  key <- function(side, what) span(class = paste0("eco-mark eco-mark-", side), what)
+
+  whole <- ecoeval::document_passages(text, terms, window = nchar(text),
+                                      max_per_term = 1000L)
+  # A window as long as the text makes the one passage the whole document.
+  full <- if (length(whole$passages)) {
+    highlight_text(whole$passages[[1L]]$text, whole$passages[[1L]]$marks)
+  } else highlight_text(text, NULL)
+
+  div(
+    class = "eco-modal-value eco-doc",
+    div(class = "k", "In the document"),
+    div(class = "eco-doc-key",
+        if (same) key("both", "value, both sides")
+        else tagList(key("ai", paste(labels$ai, "value")),
+                     key("gold", paste(labels$gold, "value"))),
+        if (any(grepl("_quote$", names(terms))))
+          tagList(key("ai_quote", paste(labels$ai, "quote")),
+                  key("gold_quote", paste(labels$gold, "quote")))),
+    lapply(missing, function(side) {
+      div(class = "eco-warn", style = "margin:6px 0;",
+          sprintf("%s value \u201c%s\u201d does not appear in the document.",
+                  who[[side]], terms[[side]]))
+    }),
+    if (length(res$passages)) {
+      lapply(res$passages, function(p) {
+        div(class = "eco-doc-passage", HTML(paste0(
+          if (p$start > 1L) "\u2026",
+          highlight_text(p$text, p$marks),
+          if (p$start + nchar(p$text) <= nchar(text)) "\u2026")))
+      })
+    } else {
+      div(class = "eco-note", "Neither value appears in the document text.")
+    },
+    tags$details(tags$summary("Read the whole document"),
+                 div(class = "eco-doc-full", full)),
+    if (!isTRUE(ecoeval::is_blank(document$reasoning[[1L]])))
+      tags$details(tags$summary("How the extraction reasoned"),
+                   div(class = "eco-doc-full", document$reasoning[[1L]]))
+  )
+}
+
 # What one clicked tile shows: what each side said, the sentences each side
 # quoted for it, and how the verdict was reached. The quoted text is the thing
 # that settles a disagreement -- without it a reader has two values and no way
 # to tell which one read the paper correctly.
 cell_modal_body <- function(cells, pair_id, field, evidence = NA_character_,
                             config = NULL, violations = character(0),
-                            label = NULL, kind = NULL) {
+                            label = NULL, kind = NULL, document = NULL) {
   row <- cells[cells$pair_id == pair_id & cells$field == field, , drop = FALSE]
   if (!nrow(row)) {
     return(div(class = "eco-note", "That cell is no longer in the comparison."))
@@ -80,6 +172,7 @@ cell_modal_body <- function(cells, pair_id, field, evidence = NA_character_,
                     original(quote_row, "gold")[[1L]])
       )
     },
+    document_section(document, row, quote_row),
     div(class = "eco-status", tags$strong("Decided by: "), row$rung, " — ",
         rung_explanation(row$rung, row$score, field_threshold(config, field))),
     if (!is.na(row$rationale))
@@ -311,7 +404,9 @@ mod_compare_server <- function(id, rv) {
           evidence = ecoeval::evidence_field(unique(rv$cells$field)),
           config = rv$comparators, violations = violation_keys(rv),
           label = unique(as.character(d$label[d$pair_id == sc$pair_id])),
-          kind = unique(d$kind[d$pair_id == sc$pair_id])
+          kind = unique(d$kind[d$pair_id == sc$pair_id]),
+          document = if (!is.null(rv$documents))
+            rv$documents[rv$documents$.paper %in% row$paper, , drop = FALSE]
         ),
         footer = tagList(
           if (row$state %in% c("agree", "disagree", "ai_missing", "gold_missing")) {

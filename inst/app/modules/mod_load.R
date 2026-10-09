@@ -196,6 +196,8 @@ mod_load_server <- function(id, rv) {
       rv$gold_raw <- res$gold_raw
       rv$ai_papers_raw <- res$ai_papers_raw
       rv$gold_papers_raw <- res$gold_papers_raw
+      rv$documents_raw <- res$documents
+      rv$documents <- NULL
       rv$config$inputs[names(res$inputs)] <- res$inputs
       # Loading fresh inputs invalidates everything downstream.
       rv$ai <- NULL; rv$gold <- NULL; rv$scope <- NULL; rv$paper_map <- NULL
