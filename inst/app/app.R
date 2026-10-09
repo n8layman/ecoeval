@@ -36,8 +36,7 @@ ui <- fluidPage(
   div(
     class = "eco-header",
     h1("ecoeval"),
-    div(class = "eco-subtitle",
-        "How accurately did the AI extraction perform against the gold standard?")
+    div(class = "eco-subtitle", textOutput("subtitle", inline = TRUE))
   ),
   fluidRow(
     column(
@@ -84,6 +83,11 @@ server <- function(input, output, session) {
       rv$reviewed <- rv$config$reviewed_papers
       rv$judge_cache <- ecoeval::new_cache(rv$config$judge_cache)
       rv$norm_cache <- ecoeval::new_cache(rv$config$normalize_cache)
+      # A restored run keeps what it called the two sides, unless the launch
+      # named them.
+      if (!isTRUE(args$labels_given) && !is.null(rv$config$side_labels)) {
+        ecoeval::use_side_labels(rv$config$side_labels)
+      }
       showNotification("Restored the previous run.", type = "message")
     }, error = function(e) {
       showNotification(paste("Could not read the run configuration:",
@@ -140,6 +144,15 @@ server <- function(input, output, session) {
 
   # ---- scope, warnings, and the two things that block ---------------------
 
+  output$subtitle <- renderText({
+    l <- lab()
+    if (identical(unclass(l), unclass(ecoeval::side_labels()))) {
+      "How accurately did the AI extraction perform against the gold standard?"
+    } else {
+      sprintf("How closely does %s agree with %s?", l$ai, l$gold)
+    }
+  })
+
   output$scope_box <- renderUI({
     if (is.null(rv$scope)) return(NULL)
     div(
@@ -147,9 +160,10 @@ server <- function(input, output, session) {
       h3(sprintf("Scope: %d papers evaluated", length(rv$scope$papers))),
       tags$pre(
         class = "eco-status",
-        sprintf("%4d  in both    -- evaluated\n%4d  AI only    -- excluded\n%4d  gold only  -- excluded",
-                length(rv$scope$papers), length(rv$scope$ai_only),
-                length(rv$scope$gold_only))
+        sprintf("%4d  in both -- evaluated\n%4d  %s -- excluded\n%4d  %s -- excluded",
+                length(rv$scope$papers),
+                length(rv$scope$ai_only), paste(lab()$ai, "only"),
+                length(rv$scope$gold_only), paste(lab()$gold, "only"))
       ),
       div(class = "eco-note",
           "Papers are a filter, not a scored entity. Papers outside the",

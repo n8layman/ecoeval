@@ -2,16 +2,18 @@
 % Please edit documentation in R/plots.R
 \name{plot_completeness}
 \alias{plot_completeness}
-\title{Fill rates, AI against gold}
+\title{Fill rates, one side against the other}
 \usage{
-plot_completeness(fills)
+plot_completeness(fills, labels = current_labels())
 }
 \arguments{
 \item{fills}{A tibble from \code{\link[=fill_rates]{fill_rates()}}.}
+
+\item{labels}{Side labels; see \code{\link[=side_labels]{side_labels()}}.}
 }
 \value{
 A ggplot.
 }
 \description{
-Fill rates, AI against gold
+Fill rates, one side against the other
 }

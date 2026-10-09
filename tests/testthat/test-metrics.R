@@ -83,7 +83,7 @@ test_that("an absent record is a class on its own axis only", {
   fx <- fixture_run()
   cc <- column_confusion(fx$cells, "interaction_type", fx$schema)
   expect_false("(no AI record)" %in% cc$matrix$gold_class)
-  expect_false("(no gold record)" %in% cc$matrix$ai_class)
+  expect_false("(no Gold standard record)" %in% cc$matrix$ai_class)
 })
 
 test_that("free text gets presence-absence with the correct/wrong split", {

@@ -4,10 +4,12 @@
 \alias{plot_confusion}
 \title{A confusion matrix as a tile plot}
 \usage{
-plot_confusion(cc)
+plot_confusion(cc, labels = current_labels())
 }
 \arguments{
 \item{cc}{The result of \code{\link[=column_confusion]{column_confusion()}}.}
+
+\item{labels}{Side labels; see \code{\link[=side_labels]{side_labels()}}.}
 }
 \value{
 A ggplot.

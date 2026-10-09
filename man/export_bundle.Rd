@@ -16,7 +16,8 @@ export_bundle(
   warnings = character(0),
   progress = NULL,
   corrections = NULL,
-  plots = TRUE
+  plots = TRUE,
+  labels = current_labels()
 )
 }
 \arguments{
@@ -42,6 +43,10 @@ working directory.}
 \item{corrections}{The string from \code{\link[=correction_count]{correction_count()}}.}
 
 \item{plots}{Whether to render the PNG plots.}
+
+\item{labels}{Side labels for the plots, findings, and README; see
+\code{\link[=side_labels]{side_labels()}}. The table column names stay \verb{ai_<field>} and
+\verb{gold_<field>}, so a script reading them does not depend on the wording.}
 }
 \value{
 The bundle directory, invisibly.

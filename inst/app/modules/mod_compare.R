@@ -68,14 +68,15 @@ cell_modal_body <- function(cells, pair_id, field, evidence = NA_character_,
                                unname(ecoeval::state_colour(row$state))]]))),
         tags$strong(verdict[[1L]]),
         sprintf(" — %s · %s · %s", verdict[[2L]],
-                if (length(kind)) kind[[1L]] else "",
+                if (length(kind)) ecoeval::record_kind_label(kind[[1L]]) else "",
                 if (length(label)) label[[1L]] else "")),
-    value_block("AI", original(row, "ai"), row$ai_value),
-    value_block("Gold standard", original(row, "gold"), row$gold_value),
+    value_block(lab()$ai, original(row, "ai"), row$ai_value),
+    value_block(lab()$gold, original(row, "gold"), row$gold_value),
     if (!is.null(quote_row) && nrow(quote_row)) {
       tagList(
-        value_block("Supporting sentences — AI", original(quote_row, "ai")[[1L]]),
-        value_block("Supporting sentences — gold standard",
+        value_block(paste("Supporting sentences —", lab()$ai),
+                    original(quote_row, "ai")[[1L]]),
+        value_block(paste("Supporting sentences —", lab()$gold),
                     original(quote_row, "gold")[[1L]])
       )
     },
@@ -388,9 +389,9 @@ mod_compare_server <- function(id, rv) {
               "recognise as the same record. Without manual linking you could",
               "only correct in one direction."),
         fluidRow(
-          column(5, selectInput(ns("link_ai"), "AI-only row",
+          column(5, selectInput(ns("link_ai"), paste(lab()$ai, "only row"),
                                 choices = label_for(ai_only, "ai"), width = "100%")),
-          column(5, selectInput(ns("link_gold"), "Gold-only row",
+          column(5, selectInput(ns("link_gold"), paste(lab()$gold, "only row"),
                                 choices = label_for(gold_only, "gold"), width = "100%")),
           column(2, div(style = "margin-top:25px;",
                         actionButton(ns("do_link"), "Link", class = "btn-primary")))

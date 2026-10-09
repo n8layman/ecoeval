@@ -24,7 +24,9 @@ HEATMAP_MAX_TILES <- 900L
 # The confusion matrix as its four boxes, coloured like the tiles they count.
 # The populated-by-both box splits into agree and differ, which is the split
 # that separates "did not fill the field in" from "filled it in wrong".
-confusion_matrix_ui <- function(n) {
+confusion_matrix_ui <- function(n, labels = lab()) {
+  only <- function(side) paste(labels[[side]], "only")
+  cost <- function(cm, neutral) if (labels$neutral) neutral else cm
   box <- function(colour, label, count, contributes) {
     div(class = paste0("eco-cm-box eco-", colour),
         div(class = "eco-cm-n", format(count, big.mark = ",")),
@@ -36,26 +38,27 @@ confusion_matrix_ui <- function(n) {
     class = "eco-cm",
     tags$thead(tags$tr(
       tags$th(""),
-      head_cell("Gold standard has a value"),
-      head_cell("Gold standard is blank")
+      head_cell(paste(labels$gold, "has a value")),
+      head_cell(paste(labels$gold, "is blank"))
     )),
     tags$tbody(
       tags$tr(
-        head_cell("AI has a value"),
+        head_cell(paste(labels$ai, "has a value")),
         tags$td(
-          box("green", "They agree", n[["agree"]], "true positive"),
+          box("green", "They agree", n[["agree"]],
+              cost("true positive", "agreement")),
           box("purple", "They differ", n[["disagree"]],
-              "false positive + false negative")
+              cost("false positive + false negative", "a difference"))
         ),
-        tags$td(box("orange", "Only in the AI", n[["only_ai"]],
-                    "false positive"))
+        tags$td(box("orange", only("ai"), n[["only_ai"]],
+                    cost("false positive", paste("missing from", labels$gold))))
       ),
       tags$tr(
-        head_cell("AI is blank"),
-        tags$td(box("yellow", "Only in the gold standard", n[["only_gold"]],
-                    "false negative")),
+        head_cell(paste(labels$ai, "is blank")),
+        tags$td(box("yellow", only("gold"), n[["only_gold"]],
+                    cost("false negative", paste("missing from", labels$ai)))),
         tags$td(box("green", "Neither side", n[["blank"]],
-                    "true negative -- drops out"))
+                    cost("true negative -- drops out", "drops out")))
       )
     )
   )
@@ -161,9 +164,9 @@ mod_dashboard_server <- function(id, rv) {
             figure_tile(fmt_pct(a$column_mean_accuracy), "Average across columns",
                         sprintf("%d columns, weighted equally", a$n_columns)),
             figure_tile(fmt_pct(r$precision), "Record precision",
-                        sprintf("%d matched, %d AI-only", r$tp, r$fp)),
+                        sprintf("%d matched, %d %s only", r$tp, r$fp, lab()$ai)),
             figure_tile(fmt_pct(r$recall), "Record recall",
-                        sprintf("%d matched, %d gold-only", r$tp, r$fn)),
+                        sprintf("%d matched, %d %s only", r$tp, r$fn, lab()$gold)),
             figure_tile(fmt_pct(r$f1), "Record F1", NULL)),
         div(class = "eco-panel", style = "margin-top:14px;",
             div(class = "eco-status",
@@ -448,7 +451,7 @@ mod_dashboard_server <- function(id, rv) {
       f <- findings()
       if (!nrow(f)) return(NULL)
       titles <- c(schema = "Schema and prompt", model = "Model",
-                  gold = "Gold standard")
+                  gold = lab()$gold)
       notes <- c(
         schema = "Things to change before the next extraction run.",
         model = "How the model actually did.",
@@ -517,7 +520,7 @@ mod_dashboard_server <- function(id, rv) {
         comparators = rv$comparators, paper_map = rv$paper_map,
         rejected = rv$rejected, added = rv$added, overrides = rv$overrides,
         cache = rv$judge_cache, norm_cache = rv$norm_cache,
-        reviewed = rv$reviewed, scope = rv$scope,
+        reviewed = rv$reviewed, scope = rv$scope, labels = lab(),
         metrics = list(
           overall_accuracy = agg()$overall_accuracy,
           column_mean_accuracy = agg()$column_mean_accuracy,

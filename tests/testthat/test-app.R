@@ -587,3 +587,16 @@ test_that("both heatmaps keep their column names on top, vertical", {
   check(plot_record_heatmap(record_field_outcomes(fx$cells, fx$scope$papers[[1L]])))
   check(plot_paper_heatmap(paper_field_outcomes(fx$cells, fx$scope$papers)))
 })
+
+test_that("the app's own wording follows the side labels", {
+  skip_without_app()
+  old <- use_side_labels(side_labels("Extraction", "Reference", neutral = TRUE))
+  on.exit(options(ecoeval.labels = old))
+  v <- state_verdict("gold_only")
+  expect_equal(v[[1L]], "Reference only")
+  expect_equal(v[[2L]], "missing from Extraction")
+  html <- as.character(confusion_matrix_ui(c(agree = 1, disagree = 2, only_ai = 3,
+                                             only_gold = 4, blank = 5)))
+  expect_match(html, "Reference has a value")
+  expect_false(grepl("false positive", html))
+})

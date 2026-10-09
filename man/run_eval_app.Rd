@@ -23,6 +23,7 @@ run_eval_app(
   skip = character(0),
   judge,
   skip_setup = FALSE,
+  labels = NULL,
   run_config = NULL,
   launch.browser = TRUE,
   ...
@@ -87,6 +88,12 @@ launching never spends money on it.}
 
 \item{skip_setup}{When \code{TRUE}, take the default for every setup input not
 supplied rather than opening its screen.}
+
+\item{labels}{What to call the two sides: \code{\link[=side_labels]{side_labels()}}, or
+\code{c(ai = "Extraction", gold = "Reference")}. Used in tooltips, legends,
+the scope panel, matrix axes, findings, and exports. \code{side_labels(..., neutral = TRUE)} also drops the TP/FP/FN wording, for a reference that is
+a second source rather than ground truth; the metrics are unchanged.
+Saved with the run.}
 
 \item{run_config}{Optional path to a \code{run_config.json} from an earlier
 session. Reload it and you are exactly where you were -- inputs, mappings,

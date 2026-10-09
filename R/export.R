@@ -115,10 +115,13 @@ confusion_wide <- function(m) {
 #' @param corrections The string from [correction_count()], or `NULL`.
 #' @param agg A tibble from [aggregate_metrics()].
 #' @param rm_ A tibble from [record_metrics()].
+#' @param labels Side labels; see [side_labels()].
 #' @return A character vector of lines.
 #' @export
 bundle_readme <- function(scope, warnings = character(0), progress = NULL,
-                          corrections = NULL, agg = NULL, rm_ = NULL) {
+                          corrections = NULL, agg = NULL, rm_ = NULL,
+                          labels = current_labels()) {
+  labels <- as_side_labels(labels)
   lines <- c(
     "ecoeval evaluation run",
     paste0("Generated ", format(Sys.time(), "%Y-%m-%d %H:%M:%S")),
@@ -128,15 +131,16 @@ bundle_readme <- function(scope, warnings = character(0), progress = NULL,
     "  aligned_table.csv       one row per aligned record, mirrors the grid",
     "  aligned_table_long.csv  tidy: one row per record x field, for pivoting",
     "  metrics.xlsx            one sheet per field plus a summary sheet",
-    "  findings.csv            findings, grouped schema / model / gold",
+    sprintf("  findings.csv            findings, grouped schema / model / %s",
+            labels$gold),
     "  schema_patch.json       proposed schema edits",
     "  plots/                  column accuracy and per-field confusion matrices",
     "  run_config.json         everything needed to reproduce this run",
     "",
     "SCOPE",
-    sprintf("  %4d papers in both    -- evaluated", length(scope$papers)),
-    sprintf("  %4d papers AI only    -- excluded", length(scope$ai_only)),
-    sprintf("  %4d papers gold only  -- excluded", length(scope$gold_only)),
+    sprintf("  %4d papers in both -- evaluated", length(scope$papers)),
+    sprintf("  %4d papers %s -- excluded", length(scope$ai_only), side_only(labels, "ai")),
+    sprintf("  %4d papers %s -- excluded", length(scope$gold_only), side_only(labels, "gold")),
     "",
     "  Papers are a filter, not a scored entity. Papers outside the",
     "  intersection are excluded, never penalised."
@@ -189,6 +193,9 @@ pct <- function(x) if (length(x) != 1L || is.na(x)) "n/a" else sprintf("%.1f%%",
 #' @param progress A tibble from [progress_summary()].
 #' @param corrections The string from [correction_count()].
 #' @param plots Whether to render the PNG plots.
+#' @param labels Side labels for the plots, findings, and README; see
+#'   [side_labels()]. The table column names stay `ai_<field>` and
+#'   `gold_<field>`, so a script reading them does not depend on the wording.
 #'
 #' @return The bundle directory, invisibly.
 #' @export
@@ -196,7 +203,8 @@ export_bundle <- function(dir = NULL, cells, pairs, config,
                           findings = NULL, scope = NULL, schema = NULL,
                           patch = NULL, warnings = character(0),
                           progress = NULL, corrections = NULL,
-                          plots = TRUE) {
+                          plots = TRUE, labels = current_labels()) {
+  labels <- as_side_labels(labels)
   if (is.null(dir)) {
     dir <- paste0("ecoeval_run_", format(Sys.Date(), "%Y-%m-%d"))
   }
@@ -207,7 +215,7 @@ export_bundle <- function(dir = NULL, cells, pairs, config,
   readr::write_csv(aligned_table(cells, pairs), fs::path(dir, "aligned_table.csv"))
   readr::write_csv(aligned_table_long(cells), fs::path(dir, "aligned_table_long.csv"))
   write_metrics_workbook(fs::path(dir, "metrics.xlsx"), cells, pairs, schema)
-  readr::write_csv(findings %||% collect_findings(cells, pairs),
+  readr::write_csv(findings %||% collect_findings(cells, pairs, labels = labels),
                    fs::path(dir, "findings.csv"))
   if (!is.null(patch)) {
     jsonlite::write_json(patch, fs::path(dir, "schema_patch.json"),
@@ -221,24 +229,26 @@ export_bundle <- function(dir = NULL, cells, pairs, config,
     fm <- field_metrics(cells)
     save_plot(fs::path(pdir, "column_accuracy.png"), plot_column_accuracy(fm),
               height = max(3, 0.4 * nrow(fm) + 1.5))
-    save_plot(fs::path(pdir, "completeness.png"), plot_completeness(fill_rates(cells)),
+    save_plot(fs::path(pdir, "completeness.png"),
+              plot_completeness(fill_rates(cells), labels),
               height = max(3, 0.4 * nrow(fm) + 1.8))
-    save_plot(fs::path(pdir, "record_outcome.png"), plot_record_outcome(record_metrics(pairs)),
+    save_plot(fs::path(pdir, "record_outcome.png"),
+              plot_record_outcome(record_metrics(pairs), labels),
               height = 3)
     for (f in fm$field) {
-      cc <- column_confusion(cells, f, schema)
+      cc <- column_confusion(cells, f, schema, labels = labels)
       save_plot(fs::path(pdir, paste0("confusion_", fs::path_sanitize(f), ".png")),
-                plot_confusion(cc))
+                plot_confusion(cc, labels))
       if (!is.null(cc$errors) && nrow(cc$errors)) {
         save_plot(fs::path(pdir, paste0("error_", fs::path_sanitize(f), ".png")),
-                  plot_error_distribution(cc$errors, f), height = 3)
+                  plot_error_distribution(cc$errors, f, labels), height = 3)
       }
     }
   }
 
   writeLines(
     bundle_readme(scope, warnings, progress, corrections,
-                  aggregate_metrics(cells), record_metrics(pairs)),
+                  aggregate_metrics(cells), record_metrics(pairs), labels),
     fs::path(dir, "README.txt")
   )
   invisible(dir)

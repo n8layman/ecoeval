@@ -209,10 +209,11 @@ place_papers <- function(loaded, keys) {
       paste("%d records carry no paper identifier and cannot be compared.",
             "Check the identifier column."), unplaced),
     if (mismatched) sprintf(
-      paste("The two sources are identified differently -- AI by %s, gold",
+      paste("The two sources are identified differently -- %s by %s, %s",
             "by %s -- so their keys cannot line up. Pick columns of the",
             "same kind on both sides."),
-      format(keys$ai), format(keys$gold))
+      current_labels()$ai, format(keys$ai), current_labels()$gold,
+      format(keys$gold))
   )
 
   list(ai = ai, gold = gold, ai_papers = ai_papers, gold_papers = gold_papers,

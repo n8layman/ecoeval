@@ -4,7 +4,13 @@
 \alias{column_confusion}
 \title{Per-column confusion matrix}
 \usage{
-column_confusion(cells, field, schema = NULL, max_k = 12L)
+column_confusion(
+  cells,
+  field,
+  schema = NULL,
+  max_k = 12L,
+  labels = current_labels()
+)
 }
 \arguments{
 \item{cells}{A cell tibble from \code{\link[=score_cells]{score_cells()}}.}
@@ -14,6 +20,9 @@ column_confusion(cells, field, schema = NULL, max_k = 12L)
 \item{schema}{An \code{ecoeval_schema}, or \code{NULL}.}
 
 \item{max_k}{Cardinality above which a column is treated as free text.}
+
+\item{labels}{Side labels, for the classes that mark a record one side
+lacks; see \code{\link[=side_labels]{side_labels()}}.}
 }
 \value{
 A list with \code{field}, \code{type} (\code{"class"}, \code{"presence"}, or

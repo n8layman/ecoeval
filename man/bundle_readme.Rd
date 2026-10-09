@@ -10,7 +10,8 @@ bundle_readme(
   progress = NULL,
   corrections = NULL,
   agg = NULL,
-  rm_ = NULL
+  rm_ = NULL,
+  labels = current_labels()
 )
 }
 \arguments{
@@ -25,6 +26,8 @@ bundle_readme(
 \item{agg}{A tibble from \code{\link[=aggregate_metrics]{aggregate_metrics()}}.}
 
 \item{rm_}{A tibble from \code{\link[=record_metrics]{record_metrics()}}.}
+
+\item{labels}{Side labels; see \code{\link[=side_labels]{side_labels()}}.}
 }
 \value{
 A character vector of lines.

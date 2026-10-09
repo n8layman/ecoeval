@@ -35,6 +35,8 @@ new_run_config <- function() {
     ecoeval_version = ecoeval_version(),
     created = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
     label = NULL,
+    # What the two sides were called; see side_labels().
+    side_labels = NULL,
     inputs = list(
       ai = NULL, ai_table = NULL, ai_paper_key = NULL,
       gold = NULL, gold_table = NULL, gold_paper_key = NULL,
@@ -151,6 +153,13 @@ normalise_run_config <- function(cfg) {
   })
   cfg$normalize_cache <- lapply(cfg$normalize_cache %||% list(),
                                 function(v) as.character(unlist(v))[[1L]])
+  if (length(cfg$side_labels)) {
+    sl <- lapply(cfg$side_labels, function(v) unlist(v)[[1L]])
+    cfg$side_labels <- side_labels(sl$ai %||% "AI", sl$gold %||% "Gold standard",
+                                   isTRUE(as.logical(sl$neutral)))
+  } else {
+    cfg$side_labels <- NULL
+  }
   cfg
 }
 
@@ -165,6 +174,7 @@ normalise_run_config <- function(cfg) {
 #' @param reviewed Papers a person has reviewed.
 #' @param scope The result of [compute_scope()].
 #' @param metrics A named list of headline numbers to record with the run.
+#' @param labels Side labels to record with the run; see [side_labels()].
 #'
 #' @return The updated configuration list.
 #' @export
@@ -178,7 +188,8 @@ capture_run_config <- function(config,
                                norm_cache = NULL,
                                reviewed = NULL,
                                scope = NULL,
-                               metrics = NULL) {
+                               metrics = NULL,
+                               labels = NULL) {
   if (!is.null(comparators)) {
     config$comparators <- df_to_rows(comparators)
     config$linkage_fields <- comparators$field[comparators$linkage]
@@ -192,6 +203,7 @@ capture_run_config <- function(config,
   if (!is.null(reviewed)) config$reviewed_papers <- as.character(reviewed)
   if (!is.null(scope)) config$scope <- lapply(scope, as.character)
   if (!is.null(metrics)) config$metrics <- metrics
+  if (!is.null(labels)) config$side_labels <- unclass(as_side_labels(labels))
   config
 }
 

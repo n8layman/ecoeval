@@ -4,7 +4,11 @@
 \alias{outcome_labels}
 \title{The outcomes in reading order, with the labels they are shown under}
 \usage{
-outcome_labels()
+outcome_labels(labels = current_labels())
+}
+\arguments{
+\item{labels}{Side labels; see \code{\link[=side_labels]{side_labels()}}. Neutral labels drop the
+TP/FP/FN wording.}
 }
 \value{
 A named character vector, outcome to label.
@@ -14,4 +18,5 @@ The outcomes in reading order, with the labels they are shown under
 }
 \examples{
 outcome_labels()
+outcome_labels(side_labels("Extraction", "Reference", neutral = TRUE))
 }
