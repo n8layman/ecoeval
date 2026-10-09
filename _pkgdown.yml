@@ -169,7 +169,7 @@ reference:
 
   - title: Alignment
     desc: >
-      fastLink, blocked per paper, permissive -- no similarity floor. The model
+      Blocked per paper, 1:1, linked only when more likely than not. The model
       is fitted once over the whole corpus and applied per block.
     contents:
       - align_records
@@ -177,7 +177,6 @@ reference:
       - fit_linkage_model
       - granularity_check
       - identifiability_check
-      - ecoeval_seed
 
   - title: Metrics
     desc: >

@@ -119,7 +119,12 @@ test_that("fill rates surface the asymmetry that reads as a schema problem", {
 
 test_that("triage flags the pair whose identity columns all disagree", {
   fx <- fixture_run()
-  susp <- suspect_pairs(fx$cells, fx$linkage)
+  # The matcher no longer forces such a pair, so link one by hand: P08's AI
+  # row against the gold row it does not match, on species or interaction.
+  added <- tibble::tibble(ai_rid = "a00010", gold_rid = "g00009")
+  pairs <- align_records(fx$ai, fx$gold, fx$linkage, fx$paper_map, added = added)
+  cells <- score_cells(pairs, fx$ai, fx$gold, fx$config)
+  susp <- suspect_pairs(cells, fx$linkage)
   expect_true(nrow(susp) >= 1L)
   expect_true(all(susp$reason %in%
                     c("agrees on nothing", "identity columns all disagree")))

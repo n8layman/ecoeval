@@ -101,13 +101,13 @@ normalizer_choices <- function() {
 #' Normalise a vector of values before matching
 #'
 #' Normalisation is a **pre-matching** step, run per value and cached, because
-#' fastLink cannot see through semantic equivalence with low string similarity:
+#' the matcher cannot see through semantic equivalence with low string similarity:
 #' `"Myotis lucifugus"` against `"little brown bat"`, or a binomial against its
 #' abbreviation. Left un-normalised, the matcher systematically fails to pair
 #' records that obviously correspond, on exactly the fields it depends on most.
 #'
-#' Plain fuzzy needs no pre-step -- fastLink already does string-distance
-#' comparison internally, so `"Myotis lucifugus"` against `"Myotis lucifigus"`
+#' Plain fuzzy needs no pre-step -- the matcher already compares by string
+#' similarity, so `"Myotis lucifugus"` against `"Myotis lucifigus"`
 #' is scored as agreement without help.
 #'
 #' `"llm_name"` uses `ecoreview::standardize_name_vector()` when ecoreview is

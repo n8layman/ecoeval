@@ -2,25 +2,32 @@
 % Please edit documentation in R/alignment.R
 \name{fit_linkage_model}
 \alias{fit_linkage_model}
-\title{Fit the linkage model once over the whole corpus}
+\title{Fit the record linkage model}
 \usage{
-fit_linkage_model(ai, gold, fields, seed = ecoeval_seed())
+fit_linkage_model(ai, gold, fields, paper_map = NULL)
 }
 \arguments{
-\item{ai, gold}{Record tibbles.}
+\item{ai, gold}{Record tibbles with \code{.paper}.}
 
 \item{fields}{Linkage fields.}
 
-\item{seed}{Seed for fastLink's internal clustering; see \code{\link[=ecoeval_seed]{ecoeval_seed()}}.}
+\item{paper_map}{Which papers' records may pair; as in \code{\link[=align_records]{align_records()}}.}
 }
 \value{
-A \code{fastLink.EM} object, or \code{NULL} when the model cannot be fit --
-in which case the similarity matcher takes over.
+An \code{ecoeval_linkage_model}: per-field agreement probabilities for
+the same record (\code{m}) and for different records (\code{u}), and \code{lambda}, the
+share of within-paper pairs that are the same record. \code{NULL} when there
+is nothing to link on.
 }
 \description{
-fastLink's EM learns which fields discriminate from the data it is given.
-Per-paper blocks hold a handful of records each -- far too few for that, and
-on two records the EM will confidently pair the wrong ones. Fitting once
-over every scoped record and then \emph{applying} that model per paper is the
-correct division of labour: pooled estimation, blocked application.
+The model \code{\link[=align_records]{align_records()}} links with, for inspecting what it learned: for
+each identity column, how strongly agreeing on it -- or not -- counts
+towards two rows being the same record.
+}
+\examples{
+ai <- tibble::tibble(.paper = c("P1", "P1", "P2"),
+                     sp = c("Myotis lucifugus", "Eptesicus fuscus", "Lasiurus borealis"))
+gold <- tibble::tibble(.paper = c("P1", "P2", "P2"),
+                       sp = c("Myotis lucifigus", "Lasiurus borealis", "Lasiurus cinereus"))
+fit_linkage_model(ai, gold, "sp")
 }

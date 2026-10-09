@@ -135,3 +135,21 @@ original_values <- function(cells, side) {
   value <- cells[[paste0(side, "_value")]]
   if (is.null(orig)) value else orig
 }
+
+#' Run an expression with a package's console chatter suppressed
+#'
+#' Some packages report progress with `cat()`, which `suppressMessages()` does
+#' not catch and which would otherwise flood a Shiny console.
+#'
+#' @param f A function of no arguments.
+#' @return The value of `f()`.
+#' @keywords internal
+#' @noRd
+quietly <- function(f) {
+  out <- NULL
+  utils::capture.output(
+    suppressWarnings(suppressMessages(out <- f())),
+    file = nullfile()
+  )
+  out
+}

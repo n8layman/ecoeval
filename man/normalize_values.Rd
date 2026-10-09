@@ -26,14 +26,14 @@ normaliser is \code{"none"} or no LLM is available.
 }
 \description{
 Normalisation is a \strong{pre-matching} step, run per value and cached, because
-fastLink cannot see through semantic equivalence with low string similarity:
+the matcher cannot see through semantic equivalence with low string similarity:
 \code{"Myotis lucifugus"} against \code{"little brown bat"}, or a binomial against its
 abbreviation. Left un-normalised, the matcher systematically fails to pair
 records that obviously correspond, on exactly the fields it depends on most.
 }
 \details{
-Plain fuzzy needs no pre-step -- fastLink already does string-distance
-comparison internally, so \code{"Myotis lucifugus"} against \code{"Myotis lucifigus"}
+Plain fuzzy needs no pre-step -- the matcher already compares by string
+similarity, so \code{"Myotis lucifugus"} against \code{"Myotis lucifigus"}
 is scored as agreement without help.
 
 \code{"llm_name"} uses \code{ecoreview::standardize_name_vector()} when ecoreview is

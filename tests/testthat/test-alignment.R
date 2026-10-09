@@ -35,22 +35,73 @@ test_that("a pooled model pairs correctly inside a two-record block", {
   expect_equal(matched$gold_rid[match("a2", matched$ai_rid)], "g2")
 })
 
-test_that("the matcher survives blocks fastLink cannot model", {
+test_that("a one-record paper still pairs", {
   ai <- tibble::tibble(.rid = "a1", .paper = "P", sp = "Myotis lucifugus")
   gold <- tibble::tibble(.rid = "g1", .paper = "P", sp = "Myotis lucifigus")
   p <- align_records(ai, gold, "sp")
   expect_equal(nrow(p), 1L)
   expect_equal(p$kind, "pair")
-  expect_equal(p$matcher, "similarity")
+  expect_equal(p$matcher, "model")
 })
 
-test_that("the matcher is permissive -- it proposes even when identifiers disagree", {
+test_that("records with no counterpart are left unpaired, not forced together", {
   ai <- tibble::tibble(.rid = c("a1", "a2"), .paper = "P",
                        sp = c("Myotis lucifugus", "Eptesicus fuscus"))
   gold <- tibble::tibble(.rid = c("g1", "g2"), .paper = "P",
                          sp = c("little brown bat", "big brown bat"))
   p <- align_records(ai, gold, "sp")
-  expect_equal(sum(p$kind == "pair"), 2L)
+  expect_equal(sum(p$kind == "pair"), 0L)
+  expect_setequal(p$kind, c("ai_only", "gold_only"))
+})
+
+test_that("a gold row the extraction missed stays gold-only", {
+  # Each paper's leftover gold row shares nothing with the AI rows, so it must
+  # not be paired with whichever AI row is free.
+  species <- c("Myotis lucifugus", "Eptesicus fuscus", "Tadarida brasiliensis",
+               "Nycticeius humeralis", "Perimyotis subflavus", "Lasiurus borealis")
+  ai <- tibble::tibble(.rid = paste0("a", 1:6),
+                       .paper = rep(c("P1", "P2", "P3"), each = 2),
+                       sp = species,
+                       loc = rep(c("Ohio", "Texas", "Florida"), each = 2))
+  gold <- ai[c(1, 3, 5), ]
+  gold$.rid <- paste0("g", 1:3)
+  extra <- tibble::tibble(.rid = paste0("g", 4:6), .paper = c("P1", "P2", "P3"),
+                          sp = c("Artibeus jamaicensis", "Desmodus rotundus",
+                                 "Carollia perspicillata"),
+                          loc = c("Peru", "Chile", "Brazil"))
+  p <- align_records(ai, dplyr::bind_rows(gold, extra), c("sp", "loc"))
+  expect_equal(sum(p$kind == "pair"), 3L)
+  expect_setequal(p$gold_rid[p$kind == "gold_only"], c("g4", "g5", "g6"))
+  expect_setequal(p$ai_rid[p$kind == "ai_only"], c("a2", "a4", "a6"))
+})
+
+test_that("identical records score as certain matches in every block", {
+  # fastLink, applied per block, looked agreement probabilities up by the
+  # order the levels appeared in the block, and scored such pairs near zero.
+  fx <- fixture_run()
+  p <- fx$pairs[fx$pairs$kind == "pair", ]
+  expect_true(all(p$posterior > 0.9))
+  expect_equal(p$gold_rid[match("a00011", p$ai_rid)], "g00010")
+  # P10: the AI row is Rousettus aegyptiacus; so is g00012, not g00013.
+  expect_equal(p$gold_rid[match("a00012", p$ai_rid)], "g00012")
+})
+
+test_that("min_posterior controls how sure a link must be", {
+  fx <- fixture_run()
+  none <- align_records(fx$ai, fx$gold, fx$linkage, fx$paper_map,
+                        min_posterior = 1.01)
+  expect_equal(sum(none$kind == "pair"), 0L)
+})
+
+test_that("the linkage model says what agreement on each field is worth", {
+  fx <- fixture_run()
+  m <- fit_linkage_model(fx$ai, fx$gold, fx$linkage, fx$paper_map)
+  expect_s3_class(m, "ecoeval_linkage_model")
+  expect_equal(m$fields, fx$linkage)
+  for (k in seq_along(m$fields)) {
+    expect_gt(m$m[[k]][["agree"]], m$u[[k]][["agree"]])
+  }
+  expect_output(print(m), "linkage model")
 })
 
 test_that("records outside the paper map never pair", {
@@ -70,6 +121,19 @@ test_that("a rejected link splits the pair into two orphans", {
                  paste(out$ai_rid, out$gold_rid))
   expect_true(first$ai_rid %in% out$ai_rid[out$kind == "ai_only"])
   expect_true(first$gold_rid %in% out$gold_rid[out$kind == "gold_only"])
+})
+
+test_that("a rejection frees a record to pair with its real partner", {
+  ai <- tibble::tibble(.rid = c("a1", "a2"), .paper = "P",
+                       sp = c("Myotis lucifugus", "Myotis lucifugus"),
+                       loc = c("Ohio", "Ohio"))
+  gold <- tibble::tibble(.rid = "g1", .paper = "P", sp = "Myotis lucifugus",
+                         loc = "Ohio")
+  first <- align_records(ai, gold, c("sp", "loc"))
+  taken <- first$ai_rid[first$kind == "pair"]
+  out <- align_records(ai, gold, c("sp", "loc"),
+                       rejected = tibble::tibble(ai_rid = taken, gold_rid = "g1"))
+  expect_equal(out$ai_rid[out$kind == "pair"], setdiff(c("a1", "a2"), taken))
 })
 
 test_that("a manual link wins over any automatic link it conflicts with", {
@@ -112,8 +176,6 @@ test_that("paper alignment falls back to identifiers when nothing links", {
 })
 
 test_that("the matcher is reproducible run to run", {
-  # fastLink clusters string distances internally and that clustering is
-  # randomly initialised, so this only holds because ecoeval pins the seed.
   fx <- fixture_run()
   a <- align_records(fx$ai, fx$gold, fx$linkage, fx$paper_map)
   b <- align_records(fx$ai, fx$gold, fx$linkage, fx$paper_map)
@@ -125,11 +187,4 @@ test_that("matching does not disturb the caller's random number stream", {
   set.seed(1); expected <- runif(3)
   set.seed(1); invisible(align_records(fx$ai, fx$gold, fx$linkage, fx$paper_map))
   expect_equal(runif(3), expected)
-})
-
-test_that("a different seed is allowed to give a different answer", {
-  fx <- fixture_run()
-  a <- align_records(fx$ai, fx$gold, fx$linkage, fx$paper_map, seed = 1L)
-  expect_s3_class(a, "tbl_df")
-  expect_equal(nrow(a), nrow(fx$pairs))
 })

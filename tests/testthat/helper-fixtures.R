@@ -13,8 +13,8 @@ fixture <- function(name) {
   skip(paste0("Fixture not found: ", name))
 }
 
-# Aligning and scoring the fixtures runs fastLink, which is the slowest thing
-# in the suite. Almost every test wants the same result, so compute it once.
+# Almost every test wants the same aligned and scored fixtures, so compute
+# them once.
 .fixture_cache <- new.env(parent = emptyenv())
 
 #' The fixtures loaded and put into canonical form, ready to align and score.
