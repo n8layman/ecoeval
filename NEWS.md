@@ -1,3 +1,37 @@
+# ecoeval (development version)
+
+## Setup inputs as arguments (#16)
+
+* `run_eval_app()` accepts every input the setup screens ask for: `paper_key`,
+  `paper_map`, `mapping`, `comparator_config`, `linkage_fields`, `fields`,
+  `normalizers`, `skip`, and `judge`. It runs the stages it was given inputs
+  for and opens on the first it was not -- straight on the comparison when
+  everything is supplied. `skip_setup = TRUE` takes the defaults for anything
+  left out. `evaluate_extraction()` takes the same arguments.
+* `ai`, `gold`, and the paper lists may be data frames as well as paths, so
+  records can be shaped in R before the evaluation.
+* Paper links: `paper_map` supplies them; otherwise `auto_accept` (the
+  default) accepts the matcher's high-confidence links and says how many it
+  left out.
+* Per-field `normalizers`: functions applied to both sides before matching and
+  comparison. Cells now carry `ai_original` and `gold_original` beside the
+  compared values, and the grid, tooltips, cell modal, and `aligned_table()`
+  show what each side actually said. This also fixes the built-in LLM name
+  normaliser, which used to overwrite the values shown.
+* `skip` turns off processing steps a run does not need: `"normalize"`,
+  `"conformance"`, `"granularity"`. `judge = NULL` turns off every LLM step.
+* The pipeline is now a set of stage functions -- `load_inputs()`,
+  `choose_paper_keys()`, `place_papers()`, `propose_paper_links()`,
+  `set_scope()`, `configure_fields()`, `score_evaluation()`, chained by
+  `setup_evaluation()` -- that the app's screens and `evaluate_extraction()`
+  share, so a scripted run and a clicked-through one are the same computation.
+* Reloading a `run_config` now restores the input paths, paper keys, paper
+  links, and field configuration, not only the manual decisions; the field
+  configuration now records each field's column mapping.
+* Fix: an accepted paper link between two different identifiers is now in
+  scope. Previously only links whose identifiers matched exactly counted, so
+  accepting a cross-identifier link the matcher proposed had no effect.
+
 # ecoeval 0.1.0
 
 First working version. The evaluation runs end to end: load two record sets and

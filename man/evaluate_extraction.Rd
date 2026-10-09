@@ -12,29 +12,81 @@ evaluate_extraction(
   gold_papers = NULL,
   paper_key = NULL,
   linkage_fields = NULL,
-  judge = NULL
+  judge = NULL,
+  paper_map = NULL,
+  auto_accept = TRUE,
+  mapping = NULL,
+  comparator_config = NULL,
+  fields = NULL,
+  normalizers = NULL,
+  skip = character(0),
+  ai_table = NULL,
+  gold_table = NULL
 )
 }
 \arguments{
-\item{ai, gold}{Paths to the two record sets, or record tibbles already in
-canonical form.}
+\item{ai, gold}{The two record sets: a path (an ecoextract SQLite database,
+CSV, Excel, ...) or a data frame. A data frame lets a caller shape records
+before the evaluation, but a saved run cannot record it, so restoring that
+run means passing it again.}
 
-\item{schema}{Path to \code{schema.json}, or an \code{ecoeval_schema}.}
+\item{schema}{Path to the \code{schema.json} the AI extracted against, or an
+\code{ecoeval_schema}. Drives comparator defaults, enum conformance checks, and
+the default linkage-field suggestion.}
 
-\item{ai_papers, gold_papers}{Optional paper list paths or tibbles.}
+\item{ai_papers, gold_papers}{Optional paper lists ("papers processed" /
+"papers reviewed") as distinct from records found: paths or data frames.
+For an ecoextract database \code{ai_papers} is read from the \code{documents} table.
+Supplying these widens scope -- see \code{DESIGN.md}.}
 
-\item{paper_key}{The columns identifying the paper -- see \code{\link[=paper_key]{paper_key()}}.
-Detected per table when \code{NULL}.}
+\item{paper_key}{The columns identifying the paper: a \code{\link[=paper_key]{paper_key()}} or
+column names applied to every table, or a named list by table (\code{ai},
+\code{gold}, \code{ai_papers}, \code{gold_papers}). Detected when \code{NULL}.}
 
-\item{linkage_fields}{Linkage fields. Defaults to the schema suggestion.}
+\item{linkage_fields}{The identity columns records are matched on. Defaults
+to the schema's \code{x-unique-fields}.}
 
-\item{judge}{An optional judge from \code{\link[=make_judge]{make_judge()}}.}
+\item{judge}{An optional judge from \code{\link[=make_judge]{make_judge()}}, run on the cells the
+cheaper rungs cannot settle. \code{NULL} (the default) leaves them pending and
+also keeps the built-in LLM normaliser off.}
+
+\item{paper_map}{The paper links to use: a data frame with \code{ai_paper} and
+\code{gold_paper}, in the identifiers the paper key produces. When \code{NULL} the
+matcher proposes them.}
+
+\item{auto_accept}{When \code{paper_map} is \code{NULL}, accept the matcher's
+high-confidence links and leave the rest out of scope without stopping to
+review them. A warning says how many were left out.}
+
+\item{mapping}{Record field mapping: \code{list(ai = c(field = "column"), gold = c(field = "column"))}. Fields named here override the suggested mapping;
+\code{NA} maps a field to nothing.}
+
+\item{comparator_config}{Comparator settings: a data frame with a \code{field}
+column and any of the columns \code{\link[=default_comparator_config]{default_comparator_config()}} returns. Rows
+replace the defaults for their field, so it may cover some fields or all.}
+
+\item{fields}{The fields to score. Defaults to every field both sides have.}
+
+\item{normalizers}{Optional named list of functions, by field, applied to
+both sides' values before matching and comparison -- for instance mapping
+a gold standard's codes onto the wording the documents use. The grid and
+tooltips still show what each side actually said. Functions cannot be
+saved in a run configuration, so pass them again when restoring a run.}
+
+\item{skip}{Processing steps to leave out; see \code{\link[=skippable_steps]{skippable_steps()}}.
+\code{"normalize"} turns off the normalisers, built-in and supplied.}
+
+\item{ai_table, gold_table}{Table names, for database input. Defaults to the
+largest table.}
 }
 \value{
 A list with \code{schema}, \code{ai}, \code{gold}, \code{scope}, \code{paper_map}, \code{config},
-\code{pairs}, \code{cells}, \code{findings} -- the same objects the app holds.
+\code{pairs}, \code{cells}, \code{conformance}, \code{findings} -- the same objects the app
+holds.
 }
 \description{
 The headless path the app is a shell over. Useful for a scripted run, a
-regression check, or producing an export bundle in CI.
+regression check, or producing an export bundle in CI. It runs the same
+stages as the app's setup screens (\code{\link[=setup_evaluation]{setup_evaluation()}}), taking the default
+for anything not supplied.
 }

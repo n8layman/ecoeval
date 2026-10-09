@@ -72,20 +72,24 @@ mod_map_metadata_server <- function(id, rv) {
       if (length(sh)) sh[[1L]] else NA_character_
     })
 
-    # What a table would be keyed on under the chosen strategy, falling back to
-    # its own best when it cannot supply that one.
-    auto_key <- function(tk) {
-      cand <- candidates()[[tk]]
-      if (!length(cand)) return(NULL)
-      s <- strategy()
-      if (!is.na(s) && !is.null(cand[[s]])) cand[[s]] else cand[[1L]]
-    }
+    # What every table would be keyed on under the chosen strategy, each
+    # falling back to its own best when it cannot supply that one.
+    auto_keys <- reactive({
+      ecoeval::choose_paper_keys(lapply(tables(), `[[`, "df"),
+                                 strategy = strategy())
+    })
+    auto_key <- function(tk) auto_keys()[[tk]]
 
-    # The manual override wins when it is set; it is pre-filled with auto_key(),
-    # so in the normal case the two are the same thing.
+    # The manual override wins when it is set; it is pre-filled with what is
+    # already in force -- a key supplied at launch, else auto_key() -- so in
+    # the normal case the two are the same thing.
     chosen_key <- function(tk) {
       manual <- input[[paste0(tk, "_cols")]]
       if (length(manual)) ecoeval::paper_key(manual) else auto_key(tk)
+    }
+    current_key <- function(tk) {
+      rv[[switch(tk, ai = "ai_paper_key", gold = "gold_paper_key",
+                 ai_papers = "ai_papers_key", gold_papers = "gold_papers_key")]]
     }
 
     output$detected <- renderUI({
@@ -126,7 +130,7 @@ mod_map_metadata_server <- function(id, rv) {
             "Only needed when the detected column is wrong. Several columns",
             "make a compound key; they are joined in the order given."),
         fluidRow(lapply(tables(), function(t) {
-          k <- auto_key(t$key)
+          k <- isolate(current_key(t$key)) %||% auto_key(t$key)
           column(6, selectInput(
             ns(paste0(t$key, "_cols")), t$label,
             choices = names(t$df), multiple = TRUE, width = "100%",
@@ -140,36 +144,9 @@ mod_map_metadata_server <- function(id, rv) {
 
     observeEvent(input$apply, {
       req(rv$ai_raw, rv$gold_raw)
-      res <- tryCatch({
-        rv$ai_paper_key <- chosen_key("ai")
-        rv$gold_paper_key <- chosen_key("gold")
-
-        # Records keep every column at this stage; the record-field mapping in
-        # stage 4 decides which of them are actually compared.
-        rv$ai <- ecoeval::prepare_records(rv$ai_raw, rv$ai_paper_key, prefix = "a")
-        rv$gold <- ecoeval::prepare_records(rv$gold_raw, rv$gold_paper_key,
-                                            prefix = "g")
-
-        # Metadata for paper alignment comes from the same role detection that
-        # found the key -- title, author, year, whatever the list carries.
-        ai_meta <- if (!is.null(rv$ai_papers_raw)) {
-          ecoeval::paper_metadata_columns(rv$ai_papers_raw)
-        } else character(0)
-        gold_meta <- if (!is.null(rv$gold_papers_raw)) {
-          ecoeval::paper_metadata_columns(rv$gold_papers_raw)
-        } else character(0)
-
-        rv$ai_papers <- if (!is.null(rv$ai_papers_raw)) {
-          rv$ai_papers_key <- chosen_key("ai_papers")
-          ecoeval::prepare_papers(rv$ai_papers_raw, rv$ai_papers_key, ai_meta)
-        }
-        rv$gold_papers <- if (!is.null(rv$gold_papers_raw)) {
-          rv$gold_papers_key <- chosen_key("gold_papers")
-          ecoeval::prepare_papers(rv$gold_papers_raw, rv$gold_papers_key, gold_meta)
-        }
-        rv$metadata_fields <- intersect(names(ai_meta), names(gold_meta))
-        TRUE
-      }, error = function(e) e)
+      keys <- lapply(stats::setNames(nm = names(tables())), chosen_key)
+      res <- tryCatch(ecoeval::place_papers(loaded_inputs(rv), keys),
+                      error = function(e) e)
 
       if (inherits(res, "error")) {
         status(conditionMessage(res))
@@ -177,35 +154,22 @@ mod_map_metadata_server <- function(id, rv) {
         return(invisible(NULL))
       }
 
-      key_cols <- function(k) if (is.null(k)) NULL else k$columns
-      rv$config$inputs$ai_paper_key <- key_cols(rv$ai_paper_key)
-      rv$config$inputs$gold_paper_key <- key_cols(rv$gold_paper_key)
-      rv$config$inputs$ai_papers_paper_key <- key_cols(rv$ai_papers_key)
-      rv$config$inputs$gold_papers_paper_key <- key_cols(rv$gold_papers_key)
-
-      # Internal consistency, run at load: every paper referenced in a record
-      # list should appear in that source's paper list.
-      checks <- dplyr::bind_rows(
-        ecoeval::source_consistency(rv$ai, rv$ai_papers, "ai"),
-        ecoeval::source_consistency(rv$gold, rv$gold_papers, "gold")
-      )
-      unplaced <- sum(is.na(rv$ai$.paper)) + sum(is.na(rv$gold$.paper))
-      # Keys of different kinds cannot match, so scope would come out empty --
-      # say so here rather than let the next stage report nothing to compare.
-      mismatched <- !is.null(rv$ai_paper_key) && !is.null(rv$gold_paper_key) &&
-        !identical(rv$ai_paper_key$strategy, rv$gold_paper_key$strategy)
-      rv$warnings <- unique(c(
-        setdiff(rv$warnings, checks$detail),
-        if (nrow(checks)) paste0(toupper(checks$source), ": ", checks$detail),
-        if (unplaced) sprintf(
-          paste("%d records carry no paper identifier and cannot be compared.",
-                "Check the identifier column."), unplaced),
-        if (mismatched) sprintf(
-          paste("The two sources are identified differently -- AI by %s, gold",
-                "by %s -- so their keys cannot line up. Pick columns of the",
-                "same kind on both sides."),
-          format(rv$ai_paper_key), format(rv$gold_paper_key))
-      ))
+      rv$ai_paper_key <- keys$ai
+      rv$gold_paper_key <- keys$gold
+      rv$ai_papers_key <- keys$ai_papers
+      rv$gold_papers_key <- keys$gold_papers
+      record_paper_keys(rv)
+      rv$ai <- res$ai
+      rv$gold <- res$gold
+      rv$ai_papers <- res$ai_papers
+      rv$gold_papers <- res$gold_papers
+      rv$metadata_fields <- res$metadata_fields
+      # New keys mean new paper identifiers, so links made under the old ones
+      # no longer apply.
+      rv$paper_proposal <- NULL
+      rv$paper_map <- NULL
+      rv$scope <- NULL
+      rv$warnings <- unique(c(rv$warnings, res$warnings))
       status(sprintf("%d AI records and %d gold records placed.",
                      sum(!is.na(rv$ai$.paper)), sum(!is.na(rv$gold$.paper))))
       rv$stage <- "papers"

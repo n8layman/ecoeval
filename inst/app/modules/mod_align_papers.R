@@ -33,15 +33,35 @@ mod_align_papers_server <- function(id, rv) {
     ns <- session$ns
     accepted <- reactiveVal(NULL)
 
+    # The matcher's proposal -- reused when it already ran at launch -- plus
+    # any link in force it did not propose, such as one supplied as paper_map.
     proposal <- reactive({
       req(rv$ai, rv$gold)
-      ai_p <- rv$ai_papers %||% tibble::tibble(.paper = ecoeval::paper_set(rv$ai))
-      gold_p <- rv$gold_papers %||% tibble::tibble(.paper = ecoeval::paper_set(rv$gold))
-      ecoeval::align_papers(ai_p, gold_p, rv$metadata_fields %||% character(0))
+      p <- rv$paper_proposal %||%
+        ecoeval::propose_paper_links(list(ai = rv$ai, gold = rv$gold,
+                                          ai_papers = rv$ai_papers,
+                                          gold_papers = rv$gold_papers,
+                                          metadata_fields = rv$metadata_fields))
+      pm <- isolate(rv$paper_map)
+      if (!is.null(pm) && nrow(pm)) {
+        extra <- pm[!paste(pm$ai_paper, pm$gold_paper) %in%
+                      paste(p$ai_paper, p$gold_paper), , drop = FALSE]
+        if (nrow(extra)) {
+          p <- dplyr::bind_rows(p, tibble::tibble(
+            ai_paper = extra$ai_paper, gold_paper = extra$gold_paper,
+            posterior = NA_real_, matcher = "supplied", accepted = TRUE))
+        }
+      }
+      p
     })
 
+    # Links already in force start ticked; otherwise the matcher's verdict.
     observeEvent(proposal(), {
-      accepted(proposal()$accepted)
+      p <- proposal()
+      pm <- isolate(rv$paper_map)
+      accepted(if (!is.null(pm) && nrow(pm)) {
+        paste(p$ai_paper, p$gold_paper) %in% paste(pm$ai_paper, pm$gold_paper)
+      } else p$accepted)
     })
 
     output$summary <- renderUI({
@@ -105,30 +125,23 @@ mod_align_papers_server <- function(id, rv) {
     observeEvent(input$apply, {
       p <- proposal()
       acc <- accepted() %||% p$accepted
-      pm <- p[acc, c("ai_paper", "gold_paper", "posterior", "matcher"), drop = FALSE]
-      pm$accepted <- TRUE
-      rv$paper_map <- pm
-
-      ai_set <- ecoeval::paper_set(rv$ai, rv$ai_papers)
-      gold_set <- ecoeval::paper_set(rv$gold, rv$gold_papers)
-      full_scope <- ecoeval::compute_scope(ai_set, gold_set)
-      # Scope is what the human accepted, not everything the matcher proposed.
-      scope <- list(
-        papers = intersect(full_scope$papers, pm$ai_paper),
-        ai_only = union(full_scope$ai_only, setdiff(full_scope$papers, pm$ai_paper)),
-        gold_only = union(full_scope$gold_only,
-                          setdiff(full_scope$papers, pm$gold_paper))
+      res <- ecoeval::set_scope(
+        list(ai = rv$ai, gold = rv$gold, ai_papers = rv$ai_papers,
+             gold_papers = rv$gold_papers),
+        p[acc, , drop = FALSE]
       )
-      rv$scope <- scope
-
-      warn <- ecoeval::coverage_warning(!is.null(rv$ai_papers),
-                                        !is.null(rv$gold_papers), scope)
-      rv$warnings <- unique(c(rv$warnings, warn))
+      rv$paper_map <- res$paper_map
+      rv$scope <- res$scope
+      # The links were just reviewed, so the launch-time note about the ones
+      # left out unreviewed no longer applies.
+      rv$warnings <- unique(c(
+        rv$warnings[!grepl("fell below the confidence cutoff", rv$warnings)],
+        res$warnings))
 
       # Zero paper overlap is one of the only two conditions that stop the app,
       # because it leaves nothing to compare.
-      if (!length(scope$papers)) {
-        rv$blocked <- ecoeval::blocking_condition(scope, names(rv$ai))
+      if (!is.null(res$blocked)) {
+        rv$blocked <- res$blocked
         return(invisible(NULL))
       }
       rv$blocked <- NULL

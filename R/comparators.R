@@ -303,14 +303,19 @@ judge_cached <- function(judge, field, a, b, cache = NULL) {
 #' @param overrides Optional tibble of manual cell overrides with `pair_id`,
 #'   `field`, `agree`.
 #' @param progress Optional function called as `progress(i, n)` between pairs.
+#' @param originals Optional `list(ai = , gold = )` of record tables holding
+#'   each side's values before normalisation, keyed by `.rid` like `ai` and
+#'   `gold`. What a reader is shown; `ai` and `gold` are what is compared.
 #'
 #' @return A tibble with one row per cell: `pair_id`, `paper`, `ai_rid`,
-#'   `gold_rid`, `field`, `ai_value`, `gold_value`, `state`, `rung`, `score`,
+#'   `gold_rid`, `field`, `ai_value`, `gold_value` (the values compared),
+#'   `ai_original`, `gold_original` (the values as read -- the same as the
+#'   compared ones unless a normaliser changed them), `state`, `rung`, `score`,
 #'   `rationale`, `pending`, `overridden`.
 #' @export
 score_cells <- function(pairs, ai, gold, config,
                         judge = NULL, cache = NULL, overrides = NULL,
-                        progress = NULL) {
+                        progress = NULL, originals = NULL) {
   config <- config[config$include, , drop = FALSE]
   fields <- config$field
   if (!nrow(pairs) || !length(fields)) {
@@ -319,6 +324,10 @@ score_cells <- function(pairs, ai, gold, config,
 
   ai_idx <- match(pairs$ai_rid, ai$.rid)
   gold_idx <- match(pairs$gold_rid, gold$.rid)
+  ai_orig <- originals$ai %||% ai
+  gold_orig <- originals$gold %||% gold
+  ai_oidx <- match(pairs$ai_rid, ai_orig$.rid)
+  gold_oidx <- match(pairs$gold_rid, gold_orig$.rid)
   n <- nrow(pairs)
   out <- vector("list", n)
 
@@ -362,6 +371,8 @@ score_cells <- function(pairs, ai, gold, config,
         field = field,
         ai_value = as_scalar_chr(av),
         gold_value = as_scalar_chr(gv),
+        ai_original = as_scalar_chr(cell_value(ai_orig, ai_oidx[[i]], field)),
+        gold_original = as_scalar_chr(cell_value(gold_orig, gold_oidx[[i]], field)),
         state = state,
         rung = res$rung,
         score = res$score,
@@ -422,7 +433,8 @@ empty_cells <- function() {
   empty_tbl(
     pair_id = character(), paper = character(), ai_rid = character(),
     gold_rid = character(), field = character(), ai_value = character(),
-    gold_value = character(), state = character(), rung = character(),
+    gold_value = character(), ai_original = character(),
+    gold_original = character(), state = character(), rung = character(),
     score = numeric(), rationale = character(), pending = logical(),
     overridden = logical()
   )

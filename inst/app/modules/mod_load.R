@@ -12,6 +12,10 @@
 # (so AI over-extraction becomes visible), the AI list brings in papers the AI
 # processed and found nothing in (so under-extraction does).
 
+# What the path box shows for an input handed to run_eval_app() as an object
+# -- a data frame, or a schema already read -- rather than a path.
+FRAME_PLACEHOLDER <- "(supplied from R)"
+
 FILE_ROOTS <- function() {
   c(project = getwd(), home = fs::path_home())
 }
@@ -89,7 +93,8 @@ mod_load_server <- function(id, rv) {
     observeEvent(rv$args, {
       for (nm in inputs) {
         v <- rv$args[[nm]]
-        if (!is.null(v)) updateTextInput(session, nm, value = v)
+        if (is.data.frame(v) || inherits(v, "ecoeval_schema")) v <- FRAME_PLACEHOLDER
+        if (is.character(v)) updateTextInput(session, nm, value = v)
       }
     }, once = TRUE, ignoreNULL = TRUE)
 
@@ -149,30 +154,23 @@ mod_load_server <- function(id, rv) {
     # ---- read everything --------------------------------------------------
     observeEvent(input$load, {
       status("")
-      read_one <- function(nm, required = FALSE, label = nm) {
-        path <- input[[nm]]
-        if (is.null(path) || !nzchar(path)) {
-          if (required) stop(label, " is required.", call. = FALSE)
-          return(NULL)
-        }
-        ecoeval::read_table_any(path, input[[paste0(nm, "_table")]])
+      # A blank box is no input; the placeholder is the object it stands for.
+      source_of <- function(nm) {
+        v <- input[[nm]]
+        if (is.null(v) || !nzchar(v)) return(NULL)
+        if (identical(v, FRAME_PLACEHOLDER)) return(rv$args[[nm]])
+        v
       }
-
-      res <- tryCatch({
-        schema <- ecoeval::read_schema(input$schema)
-        ai <- read_one("ai", TRUE, "The AI record set")
-        gold <- read_one("gold", TRUE, "The gold standard")
-        ai_pap <- read_one("ai_papers")
-        gold_pap <- read_one("gold_papers")
-
-        # For a database, the documents table is the paper list for free.
-        if (is.null(ai_pap) && nzchar(input$ai %||% "") &&
-            tolower(fs::path_ext(input$ai)) %in% c("db", "sqlite", "sqlite3")) {
-          ai_pap <- ecoeval::read_ecoextract_documents(input$ai)
-        }
-        list(schema = schema, ai = ai, gold = gold,
-             ai_pap = ai_pap, gold_pap = gold_pap)
-      }, error = function(e) e)
+      res <- tryCatch(
+        ecoeval::load_inputs(
+          ai = source_of("ai"), gold = source_of("gold"),
+          schema = source_of("schema"),
+          ai_papers = source_of("ai_papers"),
+          gold_papers = source_of("gold_papers"),
+          ai_table = input$ai_table, gold_table = input$gold_table
+        ),
+        error = function(e) e
+      )
 
       if (inherits(res, "error")) {
         status(conditionMessage(res))
@@ -181,22 +179,20 @@ mod_load_server <- function(id, rv) {
       }
 
       rv$schema <- res$schema
-      rv$ai_raw <- res$ai
-      rv$gold_raw <- res$gold
-      rv$ai_papers_raw <- res$ai_pap
-      rv$gold_papers_raw <- res$gold_pap
-      rv$config$inputs <- list(
-        ai = input$ai, ai_table = input$ai_table, gold = input$gold,
-        gold_table = input$gold_table, schema = input$schema,
-        ai_papers = input$ai_papers, gold_papers = input$gold_papers
-      )
+      rv$ai_raw <- res$ai_raw
+      rv$gold_raw <- res$gold_raw
+      rv$ai_papers_raw <- res$ai_papers_raw
+      rv$gold_papers_raw <- res$gold_papers_raw
+      rv$config$inputs[names(res$inputs)] <- res$inputs
       # Loading fresh inputs invalidates everything downstream.
       rv$ai <- NULL; rv$gold <- NULL; rv$scope <- NULL; rv$paper_map <- NULL
-      rv$comparators <- NULL; rv$pairs <- NULL; rv$cells <- NULL
+      rv$ai_shown <- NULL; rv$gold_shown <- NULL; rv$paper_proposal <- NULL
+      rv$comparators <- NULL; rv$field_seed <- NULL
+      rv$pairs <- NULL; rv$cells <- NULL
       rv$blocked <- NULL
 
       status(sprintf("Read %d AI records and %d gold records against %d schema fields.",
-                     nrow(res$ai), nrow(res$gold), nrow(res$schema$fields)))
+                     nrow(res$ai_raw), nrow(res$gold_raw), nrow(res$schema$fields)))
       rv$stage <- "metadata"
     })
 

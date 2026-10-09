@@ -76,6 +76,43 @@ without redoing everything downstream:
 5. **Compare** — one paper at a time; alignment review *and* results on one screen
 6. **Dashboard** — aggregate metrics, updating as review progresses
 
+### Skipping the setup screens
+
+Every input a setup screen asks for can be passed to `run_eval_app()` instead.
+The app runs the stages it was given inputs for and opens on the first one it
+was not, so a run repeated after every prompt change can open straight on the
+comparison:
+
+```r
+run_eval_app(
+  ai             = records,               # a path, or a data frame shaped in R
+  gold           = "gold_standard.csv",
+  schema         = "ecoextract/schema.json",
+  paper_key      = "doi",
+  mapping        = list(gold = c(sample_size = "n_individuals")),
+  linkage_fields = c("bat_species_scientific_name", "interaction_type"),
+  comparator_config = data.frame(field = "location_country", comparator = "fuzzy"),
+  normalizers    = list(location_country = function(x) countrycode_to_name(x)),
+  judge          = NULL                   # no LLM calls this run
+)
+```
+
+Leave an input out and the app stops on its screen, pre-filled with everything
+before it. `skip_setup = TRUE` takes the screen's default instead -- the
+detected paper key, the matcher's high-confidence paper links, the suggested
+mapping, the schema's comparators -- and opens on the comparison either way.
+`paper_map` supplies the paper links outright; `auto_accept = FALSE` stops on
+the paper-link review rather than accepting the confident ones.
+
+A normaliser maps both sides onto a common form before matching and comparison
+-- a gold standard's codes onto the wording the documents use, say. The grid and
+its tooltips still show what each side actually said, with the compared form
+beside it when the two differ. `skip` switches off steps a run does not need:
+`"normalize"`, `"conformance"` (the schema check), `"granularity"`.
+
+`evaluate_extraction()` takes the same arguments, so a scripted run and the app
+can share one configuration.
+
 To try it without any data of your own, press **Use the bundled example** on the
 load screen. It reads the synthetic fixtures shipped with the package, each row
 of which exists to exercise a specific case the evaluation has to get right.

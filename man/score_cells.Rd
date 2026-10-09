@@ -12,7 +12,8 @@ score_cells(
   judge = NULL,
   cache = NULL,
   overrides = NULL,
-  progress = NULL
+  progress = NULL,
+  originals = NULL
 )
 }
 \arguments{
@@ -32,10 +33,16 @@ score_cells(
 \code{field}, \code{agree}.}
 
 \item{progress}{Optional function called as \code{progress(i, n)} between pairs.}
+
+\item{originals}{Optional \code{list(ai = , gold = )} of record tables holding
+each side's values before normalisation, keyed by \code{.rid} like \code{ai} and
+\code{gold}. What a reader is shown; \code{ai} and \code{gold} are what is compared.}
 }
 \value{
 A tibble with one row per cell: \code{pair_id}, \code{paper}, \code{ai_rid},
-\code{gold_rid}, \code{field}, \code{ai_value}, \code{gold_value}, \code{state}, \code{rung}, \code{score},
+\code{gold_rid}, \code{field}, \code{ai_value}, \code{gold_value} (the values compared),
+\code{ai_original}, \code{gold_original} (the values as read -- the same as the
+compared ones unless a normaliser changed them), \code{state}, \code{rung}, \code{score},
 \code{rationale}, \code{pending}, \code{overridden}.
 }
 \description{

@@ -10,7 +10,8 @@
 #' @param cells A cell tibble from [score_cells()].
 #' @param pairs A pair tibble from [align_records()].
 #' @return A wide tibble: the pair's identity columns, then `ai_<field>`,
-#'   `gold_<field>`, and `state_<field>` for every scored field.
+#'   `gold_<field>`, and `state_<field>` for every scored field. Values are
+#'   what each side said, before any normaliser, as the grid shows them.
 #' @export
 aligned_table <- function(cells, pairs) {
   if (!nrow(cells)) return(tibble::tibble())
@@ -20,8 +21,8 @@ aligned_table <- function(cells, pairs) {
   for (f in fields) {
     sub <- cells[cells$field == f, , drop = FALSE]
     idx <- match(base$pair_id, sub$pair_id)
-    base[[paste0("ai_", f)]] <- sub$ai_value[idx]
-    base[[paste0("gold_", f)]] <- sub$gold_value[idx]
+    base[[paste0("ai_", f)]] <- original_values(sub, "ai")[idx]
+    base[[paste0("gold_", f)]] <- original_values(sub, "gold")[idx]
     base[[paste0("state_", f)]] <- sub$state[idx]
   }
   base

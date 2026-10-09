@@ -384,11 +384,19 @@ plot_record_heatmap <- function(grid, violations = character(0), focus = NULL,
 
   value <- function(x) ifelse(is.na(x) | !nzchar(x), "—",
                               truncate_label(x, 70, "start"))
+  # What each side said, and what it was compared as when a normaliser
+  # changed it.
+  said <- function(side) {
+    orig <- original_values(d, side)
+    compared <- d[[paste0(side, "_value")]]
+    changed <- !is.na(compared) & !is.na(orig) & compared != orig
+    paste0(value(orig), ifelse(changed, paste0(" (compared as ", value(compared), ")"), ""))
+  }
   d$text <- paste(
     sprintf("%s (%s)", as.character(d$label), d$kind), as.character(d$field),
     unname(outcome_labels()[as.character(d$outcome)]),
-    paste0("AI: ", value(d$ai_value)),
-    paste0("Gold: ", value(d$gold_value)),
+    paste0("AI: ", said("ai")),
+    paste0("Gold: ", said("gold")),
     ifelse(d$bad, "Fails schema validation", ""),
     sep = "\n"
   )

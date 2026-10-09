@@ -20,6 +20,12 @@
 RECORD_HEATMAP_MAX_TILES <- 900L
 RECORD_HEATMAP_SOURCE <- "eco_record_heatmap"
 
+# What a side said, before any normaliser. A cell table without the column
+# predates normalisers, so its compared value is also what was said.
+original <- function(cells, side) {
+  cells[[paste0(side, "_original")]] %||% cells[[paste0(side, "_value")]]
+}
+
 # What one clicked tile shows: what each side said, the sentences each side
 # quoted for it, and how the verdict was reached. The quoted text is the thing
 # that settles a disagreement -- without it a reader has two values and no way
@@ -42,12 +48,17 @@ cell_modal_body <- function(cells, pair_id, field, evidence = NA_character_,
                             ecoeval::canonicalise(row$gold_value)) %in% violations
   )
   verdict <- state_verdict(row$state)
-  value_block <- function(label, value) {
+  # What a side said, and -- when a normaliser changed it -- what it was
+  # compared as.
+  value_block <- function(label, value, compared = value) {
+    changed <- !is.na(compared) && !is.na(value) && !identical(compared, value)
     div(class = "eco-modal-value",
         div(class = "k", label),
         div(if (is.na(value) || !nzchar(value))
-              span(style = "opacity:.45;", "— nothing here —") else value))
+              span(style = "opacity:.45;", "— nothing here —") else value),
+        if (changed) div(class = "eco-note", paste("Compared as:", compared)))
   }
+
 
   tagList(
     div(class = "eco-status", style = "margin-bottom:10px;",
@@ -59,13 +70,13 @@ cell_modal_body <- function(cells, pair_id, field, evidence = NA_character_,
         sprintf(" — %s · %s · %s", verdict[[2L]],
                 if (length(kind)) kind[[1L]] else "",
                 if (length(label)) label[[1L]] else "")),
-    value_block("AI", row$ai_value),
-    value_block("Gold standard", row$gold_value),
+    value_block("AI", original(row, "ai"), row$ai_value),
+    value_block("Gold standard", original(row, "gold"), row$gold_value),
     if (!is.null(quote_row) && nrow(quote_row)) {
       tagList(
-        value_block("Supporting sentences — AI", quote_row$ai_value[[1L]]),
+        value_block("Supporting sentences — AI", original(quote_row, "ai")[[1L]]),
         value_block("Supporting sentences — gold standard",
-                    quote_row$gold_value[[1L]])
+                    original(quote_row, "gold")[[1L]])
       )
     },
     div(class = "eco-status", tags$strong("Decided by: "), row$rung, " — ",
@@ -366,7 +377,7 @@ mod_compare_server <- function(id, rv) {
         ident <- identity_fields(rv)
         stats::setNames(ids, vapply(ids, function(pid) {
           vals <- cells[cells$pair_id == pid & cells$field %in% ident, ]
-          v <- if (side == "ai") vals$ai_value else vals$gold_value
+          v <- original(vals, side)
           paste(stats::na.omit(v), collapse = " · ")
         }, character(1)))
       }
@@ -411,12 +422,8 @@ mod_compare_server <- function(id, rv) {
 #' All three manual operations recompute every metric immediately. A paper
 #' holds at most a hundred records, so this is free.
 realign <- function(rv) {
-  use <- rv$comparators[rv$comparators$include, , drop = FALSE]
-  linkage <- use$field[use$linkage]
+  linkage <- identity_fields(rv)
   rv$pairs <- ecoeval::align_records(rv$ai, rv$gold, linkage, rv$paper_map,
                                      rejected = rv$rejected, added = rv$added)
-  rv$cells <- ecoeval::score_cells(rv$pairs, rv$ai, rv$gold, use,
-                                   judge = NULL, cache = rv$judge_cache,
-                                   overrides = rv$overrides)
-  rv$dirty <- rv$dirty + 1L
+  rescore(rv)
 }
