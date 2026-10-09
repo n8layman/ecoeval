@@ -600,3 +600,18 @@ test_that("the app's own wording follows the side labels", {
   expect_match(html, "Reference has a value")
   expect_false(grepl("false positive", html))
 })
+
+test_that("the interactive heatmap legend reads the side labels, not codes", {
+  skip_without_app()
+  old <- use_side_labels(side_labels("Extraction", "Reference"))
+  on.exit(options(ecoeval.labels = old))
+  fx <- fixture_run()
+  w <- plotly::plotly_build(interactive_heatmap(
+    plot_record_heatmap(record_field_outcomes(fx$cells, fx$scope$papers[[1L]])),
+    "src", NULL))
+  shown <- unlist(lapply(w$x$data, function(t) if (isTRUE(t$showlegend)) t$name))
+  expect_setequal(shown, unname(outcome_labels()))
+  expect_false(any(shown %in% c("only_ai", "only_gold", "agree", "disagree")))
+  # Pinned under the grid, not a fraction of a long grid's height below it.
+  expect_equal(w$x$layout$legend$yref, "container")
+})

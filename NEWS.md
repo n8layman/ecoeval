@@ -48,6 +48,11 @@
 
 ## Fixes
 
+* The interactive record heatmap's legend shows the outcome labels -- and so
+  the side labels -- rather than the codes `only_ai` and `only_gold`, which is
+  what ggplotly() fell back to. The legend now sits just under the grid instead
+  of drifting further below it the longer the paper.
+
 * `run_eval_app()` resolves relative paths against the caller's working
   directory before launching, rather than letting them break once
   `shiny::runApp()` moves into the app folder (#18). Paths typed into the load
