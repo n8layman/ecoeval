@@ -155,12 +155,21 @@ launch_inputs <- function(args, config, restored = NULL) {
   ))
   nonempty <- function(df) if (!is.null(df) && NROW(df)) df
   restored_cfg <- nonempty(restored$comparators)
+  # A saved run from before paths were recorded absolute holds them relative
+  # to wherever it was made; the run configuration's own folder is the best
+  # guess at that.
+  saved <- function(x) {
+    x <- unlist(x)
+    if (is.null(x) || !is.character(x) || fs::is_absolute_path(x) ||
+        is.null(args$run_config)) return(x)
+    file.path(dirname(args$run_config), x)
+  }
   list(
-    ai = first(args$ai, unlist(inp$ai)),
-    gold = first(args$gold, unlist(inp$gold)),
-    schema = first(args$schema, unlist(inp$schema)),
-    ai_papers = first(args$ai_papers, unlist(inp$ai_papers)),
-    gold_papers = first(args$gold_papers, unlist(inp$gold_papers)),
+    ai = first(args$ai, saved(inp$ai)),
+    gold = first(args$gold, saved(inp$gold)),
+    schema = first(args$schema, saved(inp$schema)),
+    ai_papers = first(args$ai_papers, saved(inp$ai_papers)),
+    gold_papers = first(args$gold_papers, saved(inp$gold_papers)),
     ai_table = first(args$ai_table, unlist(inp$ai_table)),
     gold_table = first(args$gold_table, unlist(inp$gold_table)),
     paper_key = first(args$paper_key, if (length(saved_keys)) saved_keys),
@@ -355,7 +364,26 @@ interactive_heatmap <- function(p, source, input_id) {
   w <- tryCatch(plotly::ggplotly(p, tooltip = "text", source = source),
                 error = function(e) plotly::ggplotly(p))
   w <- plotly::event_register(w, "plotly_click")
-  clickable_ticks(w, input_id)
+  clickable_ticks(columns_on_top(w), input_id)
+}
+
+# Both heatmaps put the column names along the top, so they stay in view above
+# a long paper. ggplotly() drops the axis position and the angle on the way
+# across, which leaves the names horizontal at the bottom, so restore both and
+# make room above the grid for the longest name.
+columns_on_top <- function(widget) {
+  built <- plotly::plotly_build(widget)
+  ticks <- as.character(unlist(built$x$layout$xaxis$ticktext))
+  longest <- if (length(ticks)) max(nchar(ticks)) else 0L
+  margin <- built$x$layout$margin %||% list()
+  margin$t <- max(as.numeric(margin$t %||% 0), 6.5 * longest + 50)
+  plotly::layout(
+    built,
+    xaxis = list(side = "top", tickangle = -90),
+    margin = margin,
+    # The title sits above the names rather than across them.
+    title = list(y = 0.995, yref = "container", yanchor = "top")
+  )
 }
 
 # Column names are clickable in the interactive heatmap. Plotly emits click

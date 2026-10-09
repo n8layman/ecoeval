@@ -16,8 +16,15 @@
 # -- a data frame, or a schema already read -- rather than a path.
 FRAME_PLACEHOLDER <- "(supplied from R)"
 
-FILE_ROOTS <- function() {
-  c(project = getwd(), home = fs::path_home())
+# The caller's directory, not the app's: runApp() moves into the app folder.
+FILE_ROOTS <- function(project = NULL) {
+  c(project = project %||% getwd(), home = fs::path_home())
+}
+
+# A path typed into a box is relative to the caller's directory.
+resolve_typed_path <- function(path, project = NULL) {
+  if (is.null(project) || fs::is_absolute_path(path)) return(path)
+  file.path(project, path)
 }
 
 file_picker <- function(ns, id, label, note = NULL, accept_tables = FALSE) {
@@ -88,6 +95,12 @@ mod_load_server <- function(id, rv) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     inputs <- c("ai", "gold", "schema", "ai_papers", "gold_papers")
+    roots <- FILE_ROOTS(isolate(rv$args$project_dir))
+    typed <- function(nm) {
+      v <- input[[nm]]
+      if (is.null(v) || !nzchar(v) || identical(v, FRAME_PLACEHOLDER)) return(v)
+      resolve_typed_path(v, rv$args$project_dir)
+    }
 
     # ---- pre-fill from run_eval_app() arguments ---------------------------
     observeEvent(rv$args, {
@@ -103,16 +116,16 @@ mod_load_server <- function(id, rv) {
       local({
         this <- nm
         shinyFiles::shinyFileChoose(input, paste0(this, "_browse"),
-                                    roots = FILE_ROOTS(), session = session)
+                                    roots = roots, session = session)
         observeEvent(input[[paste0(this, "_browse")]], {
-          sel <- shinyFiles::parseFilePaths(FILE_ROOTS(),
+          sel <- shinyFiles::parseFilePaths(roots,
                                             input[[paste0(this, "_browse")]])
           if (nrow(sel)) updateTextInput(session, this, value = as.character(sel$datapath[[1]]))
         }, ignoreInit = TRUE)
 
         # A database needs a table chosen; a flat file does not.
         output[[paste0(this, "_table_ui")]] <- renderUI({
-          path <- input[[this]]
+          path <- typed(this)
           if (is.null(path) || !nzchar(path) || !file.exists(path)) return(NULL)
           if (!tolower(fs::path_ext(path)) %in% c("db", "sqlite", "sqlite3")) return(NULL)
           tabs <- tryCatch(ecoeval::list_db_tables(path), error = function(e) NULL)
@@ -126,7 +139,7 @@ mod_load_server <- function(id, rv) {
     }
 
     output$documents_hint <- renderUI({
-      path <- input$ai
+      path <- typed("ai")
       if (is.null(path) || !nzchar(path) ||
           !tolower(fs::path_ext(path)) %in% c("db", "sqlite", "sqlite3")) return(NULL)
       div(class = "eco-note",
@@ -159,7 +172,7 @@ mod_load_server <- function(id, rv) {
         v <- input[[nm]]
         if (is.null(v) || !nzchar(v)) return(NULL)
         if (identical(v, FRAME_PLACEHOLDER)) return(rv$args[[nm]])
-        v
+        typed(nm)
       }
       res <- tryCatch(
         ecoeval::load_inputs(

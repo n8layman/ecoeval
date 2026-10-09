@@ -117,9 +117,14 @@ run_eval_app <- function(ai = NULL,
   if (!nzchar(app_dir)) {
     eco_abort("The app directory is missing -- reinstall ecoeval.")
   }
-  for (p in list(ai, gold, schema, ai_papers, gold_papers, run_config)) {
-    if (is.character(p) && !file.exists(p)) eco_abort(paste0("File not found: ", p))
-  }
+  # runApp() moves into the app's own folder, so a path relative to the
+  # caller's working directory has to be made absolute before it goes across.
+  ai <- absolute_path(ai)
+  gold <- absolute_path(gold)
+  schema <- absolute_path(schema)
+  ai_papers <- absolute_path(ai_papers)
+  gold_papers <- absolute_path(gold_papers)
+  run_config <- absolute_path(run_config)
   check_skip(skip)
   judge_mode <- if (missing(judge)) "default" else if (is.null(judge)) "off" else "supplied"
   if (judge_mode == "supplied" && !is.function(judge)) {
@@ -136,9 +141,27 @@ run_eval_app <- function(ai = NULL,
     judge_mode = judge_mode,
     judge = if (judge_mode == "supplied") judge,
     skip_setup = skip_setup,
-    run_config = run_config
+    run_config = run_config,
+    # Where the file browser starts, and what a path typed into the app is
+    # relative to: the caller's directory, not the app's.
+    project_dir = getwd()
   ))
   shiny::runApp(app_dir, launch.browser = launch.browser)
+}
+
+#' Make a path argument absolute
+#'
+#' @param x A path, or anything else -- a data frame, a schema, `NULL` -- which
+#'   is returned unchanged.
+#' @param base The directory a relative path is relative to.
+#' @return An absolute path, or `x`.
+#' @keywords internal
+#' @noRd
+absolute_path <- function(x, base = getwd()) {
+  if (!is.character(x) || length(x) != 1L || is.na(x) || !nzchar(x)) return(x)
+  full <- if (fs::is_absolute_path(x)) x else file.path(base, x)
+  if (!file.exists(full)) eco_abort(paste0("File not found: ", x))
+  normalizePath(full, mustWork = TRUE)
 }
 
 #' Where the Shiny app lives
