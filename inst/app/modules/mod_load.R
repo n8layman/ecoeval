@@ -51,10 +51,10 @@ mod_load_ui <- function(id) {
       paste("Two sets of results from the same papers: one the AI produced,",
             "one a person produced by hand."),
       fluidRow(
-        column(6, file_picker(ns, "ai", "AI records",
+        column(6, file_picker(ns, "ai", paste(lab()$ai, "records"),
                               "An ecoextract .db, or a CSV/Excel file.",
                               accept_tables = TRUE)),
-        column(6, file_picker(ns, "gold", "Gold standard records",
+        column(6, file_picker(ns, "gold", paste(lab()$gold, "records"),
                               "CSV, Excel, or a database.",
                               accept_tables = TRUE))
       )
@@ -73,9 +73,9 @@ mod_load_ui <- function(id) {
             "scored. For an ecoextract database the AI list is free -- it is",
             "the documents table."),
       fluidRow(
-        column(6, file_picker(ns, "ai_papers", "Papers the AI processed",
+        column(6, file_picker(ns, "ai_papers", paste("Papers processed:", lab()$ai),
                               accept_tables = TRUE)),
-        column(6, file_picker(ns, "gold_papers", "Papers the human reviewed",
+        column(6, file_picker(ns, "gold_papers", paste("Papers reviewed:", lab()$gold),
                               accept_tables = TRUE))
       ),
       uiOutput(ns("documents_hint"))
@@ -204,8 +204,9 @@ mod_load_server <- function(id, rv) {
       rv$pairs <- NULL; rv$cells <- NULL
       rv$blocked <- NULL
 
-      status(sprintf("Read %d AI records and %d gold records against %d schema fields.",
-                     nrow(res$ai_raw), nrow(res$gold_raw), nrow(res$schema$fields)))
+      status(sprintf("Read %d %s records and %d %s records against %d schema fields.",
+                     nrow(res$ai_raw), lab()$ai, nrow(res$gold_raw), lab()$gold,
+                     nrow(res$schema$fields)))
       rv$stage <- "metadata"
     })
 

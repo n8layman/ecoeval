@@ -4,10 +4,12 @@
 \alias{plot_record_outcome}
 \title{Record-level outcome, as one stacked bar}
 \usage{
-plot_record_outcome(rm_)
+plot_record_outcome(rm_, labels = current_labels())
 }
 \arguments{
 \item{rm_}{A tibble from \code{\link[=record_metrics]{record_metrics()}}.}
+
+\item{labels}{Side labels; see \code{\link[=side_labels]{side_labels()}}.}
 }
 \value{
 A ggplot.

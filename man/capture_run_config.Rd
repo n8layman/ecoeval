@@ -15,7 +15,8 @@ capture_run_config(
   norm_cache = NULL,
   reviewed = NULL,
   scope = NULL,
-  metrics = NULL
+  metrics = NULL,
+  labels = NULL
 )
 }
 \arguments{
@@ -36,6 +37,8 @@ capture_run_config(
 \item{scope}{The result of \code{\link[=compute_scope]{compute_scope()}}.}
 
 \item{metrics}{A named list of headline numbers to record with the run.}
+
+\item{labels}{Side labels to record with the run; see \code{\link[=side_labels]{side_labels()}}.}
 }
 \value{
 The updated configuration list.

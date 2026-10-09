@@ -95,8 +95,8 @@ mod_map_records_server <- function(id, rv) {
       tags$table(
         class = "eco-cfg",
         tags$thead(tags$tr(
-          tags$th("Use"), tags$th("Field"), tags$th("AI column"),
-          tags$th("Gold column"), tags$th("Comparator"), tags$th("Cutoff"),
+          tags$th("Use"), tags$th("Field"), tags$th(paste(lab()$ai, "column")),
+          tags$th(paste(lab()$gold, "column")), tags$th("Comparator"), tags$th("Cutoff"),
           tags$th("Normalise"), tags$th("Identity")
         )),
         tags$tbody(lapply(seq_len(nrow(cfg)), row_ui))

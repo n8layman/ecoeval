@@ -67,15 +67,20 @@ cell_outcome <- function(state) {
 
 #' The outcomes in reading order, with the labels they are shown under
 #'
+#' @param labels Side labels; see [side_labels()]. Neutral labels drop the
+#'   TP/FP/FN wording.
 #' @return A named character vector, outcome to label.
 #' @examples
 #' outcome_labels()
+#' outcome_labels(side_labels("Extraction", "Reference", neutral = TRUE))
 #' @export
-outcome_labels <- function() {
-  c(agree = "Agree (TP, or TN where neither side has a value)",
-    disagree = "Both have a value, they differ (FP + FN)",
-    only_gold = "Only in the gold standard (FN)",
-    only_ai = "Only in the AI (FP)")
+outcome_labels <- function(labels = current_labels()) {
+  labels <- as_side_labels(labels)
+  c(agree = if (labels$neutral) "Agree, or neither side has a value"
+            else "Agree (TP, or TN where neither side has a value)",
+    disagree = paste0("Both have a value, they differ", cm_tag(labels, "FP + FN")),
+    only_gold = paste0(side_only(labels, "gold"), cm_tag(labels, "FN")),
+    only_ai = paste0(side_only(labels, "ai"), cm_tag(labels, "FP")))
 }
 
 #' Grid colour for each cell state
@@ -205,13 +210,17 @@ aggregate_metrics <- function(cells) {
 #' @param field The column to describe.
 #' @param schema An `ecoeval_schema`, or `NULL`.
 #' @param max_k Cardinality above which a column is treated as free text.
+#' @param labels Side labels, for the classes that mark a record one side
+#'   lacks; see [side_labels()].
 #'
 #' @return A list with `field`, `type` (`"class"`, `"presence"`, or
 #'   `"numeric"`), `matrix` (a long tibble of `gold_class`, `ai_class`, `n`),
 #'   `errors` (numeric columns only), and `notes` -- a character vector of
 #'   cautions, such as a single class dominating or too few matched records.
 #' @export
-column_confusion <- function(cells, field, schema = NULL, max_k = 12L) {
+column_confusion <- function(cells, field, schema = NULL, max_k = 12L,
+                             labels = current_labels()) {
+  labels <- as_side_labels(labels)
   sub <- cells[cells$field == field, , drop = FALSE]
   enum <- schema_enum(schema, field)
   sch_type <- schema_type_of(schema, field)
@@ -227,13 +236,13 @@ column_confusion <- function(cells, field, schema = NULL, max_k = 12L) {
   }
 
   if (length(enum) || (k > 0L && k <= max_k && !sch_type %in% c("number", "integer"))) {
-    m <- class_matrix(sub, enum)
+    m <- class_matrix(sub, enum, labels)
     dom <- dplyr::summarise(dplyr::group_by(m, .data$gold_class),
                             n = sum(.data$n), .groups = "drop")
     if (nrow(dom) && sum(dom$n) > 0 && max(dom$n) / sum(dom$n) > 0.9) {
       notes <- c(notes, sprintf(
-        "One class ('%s') is %.0f%% of the gold values -- accuracy here is trivially high.",
-        dom$gold_class[which.max(dom$n)], 100 * max(dom$n) / sum(dom$n)
+        "One class ('%s') is %.0f%% of the %s values -- accuracy here is trivially high.",
+        dom$gold_class[which.max(dom$n)], 100 * max(dom$n) / sum(dom$n), labels$gold
       ))
     }
     return(list(field = field, type = "class", matrix = m, errors = NULL, notes = notes))
@@ -263,7 +272,9 @@ column_confusion <- function(cells, field, schema = NULL, max_k = 12L) {
 #' @return A long tibble of `gold_class`, `ai_class`, `n`.
 #' @keywords internal
 #' @noRd
-class_matrix <- function(sub, enum = character(0)) {
+class_matrix <- function(sub, enum = character(0), labels = current_labels()) {
+  no_gold <- sprintf("(no %s record)", labels$gold)
+  no_ai <- sprintf("(no %s record)", labels$ai)
   classify <- function(x) {
     out <- canonicalise(x)
     out[is_blank(x)] <- "(blank)"
@@ -277,14 +288,14 @@ class_matrix <- function(sub, enum = character(0)) {
   }
   g <- classify(sub$gold_value)
   a <- classify(sub$ai_value)
-  g[is.na(sub$gold_rid)] <- "(no gold record)"
-  a[is.na(sub$ai_rid)] <- "(no AI record)"
+  g[is.na(sub$gold_rid)] <- no_gold
+  a[is.na(sub$ai_rid)] <- no_ai
   # Each axis gets only the classes that can occur on it: "(no AI record)" is
   # never an AI class, and an empty row for it would be noise on the chart.
   base <- unique(c(if (length(enum)) enum else character(0),
-                   setdiff(c(g, a), c("(no gold record)", "(no AI record)"))))
-  gold_levels <- c(base, if ("(no gold record)" %in% g) "(no gold record)")
-  ai_levels <- c(base, if ("(no AI record)" %in% a) "(no AI record)")
+                   setdiff(c(g, a), c(no_gold, no_ai))))
+  gold_levels <- c(base, if (no_gold %in% g) no_gold)
+  ai_levels <- c(base, if (no_ai %in% a) no_ai)
   grid <- expand.grid(gold_class = gold_levels, ai_class = ai_levels,
                       stringsAsFactors = FALSE)
   counts <- dplyr::count(tibble::tibble(gold_class = g, ai_class = a),
@@ -423,6 +434,8 @@ progress_summary <- function(cells, papers, reviewed = character(0)) {
 #' @param field One column to restrict the count to, or `NULL` for all of them.
 #'   The same five boxes either way -- a column's confusion matrix is the whole
 #'   run's, computed over fewer cells.
+#' @param labels Side labels; see [side_labels()]. Neutral labels describe
+#'   each box's contribution without TP/FP/FN.
 #' @return A list with `field`, `by_outcome` (a tibble of `outcome`, `label`,
 #'   `contributes`, `colour`, `n`, `tp`, `fp`, `fn`, `tn`, in reading order),
 #'   the totals `tp`, `fp`, `fn`, `tn`, `n_scored`, and the metrics derived from
@@ -430,7 +443,8 @@ progress_summary <- function(cells, papers, reviewed = character(0)) {
 #' @examples
 #' confusion_totals(empty_cells())$by_outcome$label
 #' @export
-confusion_totals <- function(cells, field = NULL) {
+confusion_totals <- function(cells, field = NULL, labels = current_labels()) {
+  side <- as_side_labels(labels)
   if (!is.null(field)) {
     cells <- cells[cells$field %in% field, , drop = FALSE]
   }
@@ -439,14 +453,22 @@ confusion_totals <- function(cells, field = NULL) {
   categories <- c("agree", "disagree", "only_gold", "only_ai", "blank")
   labels <- c(agree = "Both sides agree on a value",
               disagree = "Both have a value, they differ",
-              only_gold = "Only the gold standard has a value",
-              only_ai = "Only the AI has a value",
+              only_gold = sprintf("Only %s has a value", side$gold),
+              only_ai = sprintf("Only %s has a value", side$ai),
               blank = "Neither side has a value")
-  contributes <- c(agree = "true positive",
-                   disagree = "false positive and false negative",
-                   only_gold = "false negative \u2014 a miss",
-                   only_ai = "false positive",
-                   blank = "true negative \u2014 drops out of every metric")
+  contributes <- if (side$neutral) {
+    c(agree = "counts as agreement",
+      disagree = "counts as a difference",
+      only_gold = sprintf("missing from %s", side$ai),
+      only_ai = sprintf("missing from %s", side$gold),
+      blank = "drops out of every metric")
+  } else {
+    c(agree = "true positive",
+      disagree = "false positive and false negative",
+      only_gold = "false negative \u2014 a miss",
+      only_ai = "false positive",
+      blank = "true negative \u2014 drops out of every metric")
+  }
   colours <- unname(state_colour(c("agree", "disagree", "gold_only",
                                    "ai_only", "blank")))
 

@@ -61,6 +61,12 @@
 #'   launching never spends money on it.
 #' @param skip_setup When `TRUE`, take the default for every setup input not
 #'   supplied rather than opening its screen.
+#' @param labels What to call the two sides: [side_labels()], or
+#'   `c(ai = "Extraction", gold = "Reference")`. Used in tooltips, legends,
+#'   the scope panel, matrix axes, findings, and exports. `side_labels(...,
+#'   neutral = TRUE)` also drops the TP/FP/FN wording, for a reference that is
+#'   a second source rather than ground truth; the metrics are unchanged.
+#'   Saved with the run.
 #' @param run_config Optional path to a `run_config.json` from an earlier
 #'   session. Reload it and you are exactly where you were -- inputs, mappings,
 #'   manual link decisions, and cached LLM verdicts included. Arguments passed
@@ -110,6 +116,7 @@ run_eval_app <- function(ai = NULL,
                          skip = character(0),
                          judge,
                          skip_setup = FALSE,
+                         labels = NULL,
                          run_config = NULL,
                          launch.browser = TRUE,
                          ...) {
@@ -126,6 +133,11 @@ run_eval_app <- function(ai = NULL,
   gold_papers <- absolute_path(gold_papers)
   run_config <- absolute_path(run_config)
   check_skip(skip)
+  # The labels are a session option, so every plot and table the app draws
+  # picks them up; put back whatever was there when the app closes.
+  old_labels <- getOption("ecoeval.labels")
+  on.exit(options(ecoeval.labels = old_labels), add = TRUE)
+  if (!is.null(labels)) use_side_labels(labels)
   judge_mode <- if (missing(judge)) "default" else if (is.null(judge)) "off" else "supplied"
   if (judge_mode == "supplied" && !is.function(judge)) {
     eco_abort("`judge` is a function from make_judge(), or NULL to turn it off.")
@@ -141,6 +153,7 @@ run_eval_app <- function(ai = NULL,
     judge_mode = judge_mode,
     judge = if (judge_mode == "supplied") judge,
     skip_setup = skip_setup,
+    labels_given = !is.null(labels),
     run_config = run_config,
     # Where the file browser starts, and what a path typed into the app is
     # relative to: the caller's directory, not the app's.
@@ -188,6 +201,8 @@ app_directory <- function() {
 #' for anything not supplied.
 #'
 #' @inheritParams run_eval_app
+#' @param labels What to call the two sides in the findings; see
+#'   [side_labels()]. Defaults to [current_labels()].
 #' @param judge An optional judge from [make_judge()], run on the cells the
 #'   cheaper rungs cannot settle. `NULL` (the default) leaves them pending and
 #'   also keeps the built-in LLM normaliser off.
@@ -204,7 +219,9 @@ evaluate_extraction <- function(ai, gold, schema,
                                 mapping = NULL, comparator_config = NULL,
                                 fields = NULL, normalizers = NULL,
                                 skip = character(0),
-                                ai_table = NULL, gold_table = NULL) {
+                                ai_table = NULL, gold_table = NULL,
+                                labels = NULL) {
+  labels <- as_side_labels(labels)
   run <- setup_evaluation(
     ai = ai, gold = gold, schema = schema,
     ai_papers = ai_papers, gold_papers = gold_papers,
@@ -229,7 +246,8 @@ evaluate_extraction <- function(ai, gold, schema,
     gold_fields = config$field[!is.na(config$gold_col)],
     collapses = scored$collapses,
     dropped_fields = config$field[xor(is.na(config$ai_col), is.na(config$gold_col))],
-    linkage_fields = linkage
+    linkage_fields = linkage,
+    labels = labels
   )
   list(schema = run$loaded$schema, ai = scored$ai, gold = scored$gold,
        scope = run$scoped$scope, paper_map = run$scoped$paper_map,

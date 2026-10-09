@@ -60,6 +60,17 @@ reference:
       - run_eval_app
       - evaluate_extraction
 
+  - title: What the two sides are called
+    desc: >
+      "AI" and "Gold standard" are defaults. Name the sides for what they are,
+      and use neutral wording when the reference is a second source rather
+      than ground truth. Wording only; the metrics are unchanged.
+    contents:
+      - side_labels
+      - current_labels
+      - use_side_labels
+      - record_kind_label
+
   - title: The pipeline, stage by stage
     desc: >
       The stages the app's setup screens and evaluate_extraction() share.

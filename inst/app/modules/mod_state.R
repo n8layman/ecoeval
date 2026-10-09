@@ -332,19 +332,33 @@ field_threshold <- function(config, field) {
 #' How a cell state reads in words, and what it costs the accounting
 #'
 #' The colour says it, but a modal should not make anyone decode a colour.
-state_verdict <- function(state) {
+state_verdict <- function(state, labels = ecoeval::current_labels()) {
+  only <- function(side) paste(labels[[side]], "only")
+  # Neutral labels say what happened without scoring it as the extraction's
+  # error.
+  cost <- function(cm, neutral) if (labels$neutral) neutral else cm
   switch(
     state,
-    agree = c("They agree", "true positive"),
-    disagree = c("They differ", "false positive and false negative"),
-    ai_missing = c("Only in the gold standard", "false negative"),
-    gold_only = c("Only in the gold standard", "false negative"),
-    gold_missing = c("Only in the AI", "false positive"),
-    ai_only = c("Only in the AI", "false positive"),
-    blank = c("Neither side has a value", "true negative, dropped from the metrics"),
+    agree = c("They agree", cost("true positive", "agreement")),
+    disagree = c("They differ", cost("false positive and false negative",
+                                     "a difference")),
+    ai_missing = c(only("gold"), cost("false negative",
+                                      paste("missing from", labels$ai))),
+    gold_only = c(only("gold"), cost("false negative",
+                                     paste("missing from", labels$ai))),
+    gold_missing = c(only("ai"), cost("false positive",
+                                      paste("missing from", labels$gold))),
+    ai_only = c(only("ai"), cost("false positive",
+                                 paste("missing from", labels$gold))),
+    blank = c("Neither side has a value",
+              cost("true negative, dropped from the metrics",
+                   "dropped from the metrics")),
     c(state, "")
   )
 }
+
+#' The side labels in force, for the app's own wording
+lab <- function() ecoeval::current_labels()
 
 # A clicked axis label comes back as the plot drew it, which may be shortened
 # with a trailing ellipsis, so match on what is left of the front of it.

@@ -8,7 +8,8 @@ plot_record_heatmap(
   grid,
   violations = character(0),
   focus = NULL,
-  paper = NULL
+  paper = NULL,
+  labels = current_labels()
 )
 }
 \arguments{
@@ -20,6 +21,8 @@ plot_record_heatmap(
 \item{focus}{A column to outline, typically the one clicked in the overview.}
 
 \item{paper}{The paper's identifier, for the title.}
+
+\item{labels}{Side labels; see \code{\link[=side_labels]{side_labels()}}.}
 }
 \value{
 A ggplot.

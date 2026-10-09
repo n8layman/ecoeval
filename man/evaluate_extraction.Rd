@@ -21,7 +21,8 @@ evaluate_extraction(
   normalizers = NULL,
   skip = character(0),
   ai_table = NULL,
-  gold_table = NULL
+  gold_table = NULL,
+  labels = NULL
 )
 }
 \arguments{
@@ -78,6 +79,9 @@ saved in a run configuration, so pass them again when restoring a run.}
 
 \item{ai_table, gold_table}{Table names, for database input. Defaults to the
 largest table.}
+
+\item{labels}{What to call the two sides in the findings; see
+\code{\link[=side_labels]{side_labels()}}. Defaults to \code{\link[=current_labels]{current_labels()}}.}
 }
 \value{
 A list with \code{schema}, \code{ai}, \code{gold}, \code{scope}, \code{paper_map}, \code{config},

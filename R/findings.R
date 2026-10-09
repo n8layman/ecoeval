@@ -21,6 +21,8 @@
 #'   identity columns all disagree.
 #' @param recurring_at Count at which an out-of-enum value reads as a missing
 #'   category rather than a typo.
+#' @param labels Side labels for the wording; see [side_labels()]. The `group`
+#'   codes stay `"schema"`, `"model"`, `"gold"`.
 #'
 #' @return A tibble with `group` (`"schema"`, `"model"`, or `"gold"`),
 #'   `finding`, `detail`, `n`, sorted by group then descending `n`.
@@ -33,7 +35,9 @@ collect_findings <- function(cells,
                              collapses = NULL,
                              dropped_fields = character(0),
                              linkage_fields = character(0),
-                             recurring_at = 3L) {
+                             recurring_at = 3L,
+                             labels = current_labels()) {
+  labels <- as_side_labels(labels)
   out <- list()
   add <- function(group, finding, detail, n = NA_integer_) {
     out[[length(out) + 1L]] <<- tibble::tibble(
@@ -47,7 +51,7 @@ collect_findings <- function(cells,
                                conformance$reason == "not_in_enum", , drop = FALSE]
     for (i in seq_len(nrow(gold_enum))) {
       if (gold_enum$n[[i]] < recurring_at) next
-      add("schema", "Recurring gold value outside the schema enum",
+      add("schema", sprintf("Recurring %s value outside the schema enum", labels$gold),
           sprintf("%s: '%s' appears %d times -- a category the schema is missing.",
                   gold_enum$field[[i]], gold_enum$value[[i]], gold_enum$n[[i]]),
           gold_enum$n[[i]])
@@ -56,8 +60,8 @@ collect_findings <- function(cells,
   if (!is.null(schema) && length(gold_fields)) {
     orphan <- unschematised_fields(gold_fields, schema)
     for (f in orphan) {
-      add("schema", "Gold field with no schema counterpart",
-          sprintf("The gold standard records '%s'; the schema has no slot for it.", f))
+      add("schema", sprintf("%s field with no schema counterpart", labels$gold),
+          sprintf("%s records '%s'; the schema has no slot for it.", labels$gold, f))
     }
   }
   for (f in dropped_fields) {
@@ -78,9 +82,10 @@ collect_findings <- function(cells,
     gap <- fills$gap[[i]]
     if (is.na(gap) || gap < 0.4) next
     add("schema", "Fill-rate asymmetry",
-        sprintf(paste0("Humans populate '%s' %.0f%% of the time, the AI %.0f%% ",
+        sprintf(paste0("%s populates '%s' %.0f%% of the time, %s %.0f%% ",
                        "-- usually a field-description problem, not a model failure."),
-                fills$field[[i]], 100 * fills$gold_fill[[i]], 100 * fills$ai_fill[[i]]),
+                labels$gold, fills$field[[i]], 100 * fills$gold_fill[[i]],
+                labels$ai, 100 * fills$ai_fill[[i]]),
         round(100 * gap))
   }
 
@@ -97,7 +102,7 @@ collect_findings <- function(cells,
   if (!is.null(conformance) && nrow(conformance)) {
     ai_bad <- conformance[conformance$source == "ai", , drop = FALSE]
     if (nrow(ai_bad)) {
-      add("model", "AI values that violate the schema",
+      add("model", sprintf("%s values that violate the schema", labels$ai),
           sprintf(paste0("%d distinct values across %d fields fail enum or type ",
                          "validation. Structured output should have prevented ",
                          "this -- it is a pipeline problem as well as an error."),
@@ -108,9 +113,12 @@ collect_findings <- function(cells,
   rm_ <- record_metrics(pairs)
   if (rm_$fp > 0 || rm_$fn > 0) {
     add("model", "Record-level precision and recall",
-        sprintf(paste0("%d matched, %d AI-only (false positives), %d gold-only ",
-                       "(false negatives). Precision %.2f, recall %.2f."),
-                rm_$tp, rm_$fp, rm_$fn, rm_$precision, rm_$recall),
+        sprintf("%d matched, %d %s%s, %d %s%s. Precision %.2f, recall %.2f.",
+                rm_$tp, rm_$fp, side_only(labels, "ai"),
+                cm_tag(labels, "false positives"),
+                rm_$fn, side_only(labels, "gold"),
+                cm_tag(labels, "false negatives"),
+                rm_$precision, rm_$recall),
         rm_$fp + rm_$fn)
   }
   susp <- suspect_pairs(cells, linkage_fields)

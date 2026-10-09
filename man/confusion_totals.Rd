@@ -4,7 +4,7 @@
 \alias{confusion_totals}
 \title{The confusion matrix, as the colours counted}
 \usage{
-confusion_totals(cells, field = NULL)
+confusion_totals(cells, field = NULL, labels = current_labels())
 }
 \arguments{
 \item{cells}{A cell tibble from \code{\link[=score_cells]{score_cells()}}.}
@@ -12,6 +12,9 @@ confusion_totals(cells, field = NULL)
 \item{field}{One column to restrict the count to, or \code{NULL} for all of them.
 The same five boxes either way -- a column's confusion matrix is the whole
 run's, computed over fewer cells.}
+
+\item{labels}{Side labels; see \code{\link[=side_labels]{side_labels()}}. Neutral labels describe
+each box's contribution without TP/FP/FN.}
 }
 \value{
 A list with \code{field}, \code{by_outcome} (a tibble of \code{outcome}, \code{label},

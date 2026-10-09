@@ -32,6 +32,20 @@
   scope. Previously only links whose identifiers matched exactly counted, so
   accepting a cross-identifier link the matcher proposed had no effect.
 
+## Side labels (#20)
+
+* `labels` on `run_eval_app()`, `evaluate_extraction()`, `export_bundle()`, and
+  the plotting functions names the two sides: `labels = c(ai = "Extraction",
+  gold = "Reference")`, or `side_labels()`. Tooltips, legends, the scope panel,
+  matrix axes, findings, and the export README follow it, and a saved run
+  remembers it. `use_side_labels()` sets it for a session.
+* `side_labels(..., neutral = TRUE)` drops the TP/FP/FN wording from outcome
+  labels, for a reference that is a second source rather than ground truth.
+  Wording only: the scoring and the metrics are unchanged.
+* `record_field_outcomes()` keeps `kind` as a stable code; `record_kind_label()`
+  is how it reads under the labels. Table column names in exports stay
+  `ai_<field>` and `gold_<field>`.
+
 ## Fixes
 
 * `run_eval_app()` resolves relative paths against the caller's working

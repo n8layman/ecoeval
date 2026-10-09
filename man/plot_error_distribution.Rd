@@ -4,12 +4,14 @@
 \alias{plot_error_distribution}
 \title{Signed error for a numeric column}
 \usage{
-plot_error_distribution(errors, field = "")
+plot_error_distribution(errors, field = "", labels = current_labels())
 }
 \arguments{
 \item{errors}{The \code{errors} element of a \code{\link[=column_confusion]{column_confusion()}} result.}
 
 \item{field}{Column name, for the title.}
+
+\item{labels}{Side labels; see \code{\link[=side_labels]{side_labels()}}.}
 }
 \value{
 A ggplot.

@@ -163,10 +163,10 @@ mod_align_papers_server <- function(id, rv) {
       eco_panel(
         "Excluded from scope", 
         "Excluded, never penalised. They simply narrow the comparison set.",
-        show(rv$scope$ai_only, "AI-only papers",
-             "the gold standard has nothing for them"),
-        show(rv$scope$gold_only, "gold-only papers",
-             "the AI has nothing for them")
+        show(rv$scope$ai_only, paste(lab()$ai, "only papers"),
+             paste(lab()$gold, "has nothing for them")),
+        show(rv$scope$gold_only, paste(lab()$gold, "only papers"),
+             paste(lab()$ai, "has nothing for them"))
       )
     })
   })

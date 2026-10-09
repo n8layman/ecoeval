@@ -4,13 +4,15 @@
 \alias{plot_paper_heatmap}
 \title{The whole run as one picture: papers against columns}
 \usage{
-plot_paper_heatmap(grid, max_papers = 60)
+plot_paper_heatmap(grid, max_papers = 60, labels = current_labels())
 }
 \arguments{
 \item{grid}{A tibble from \code{\link[=paper_field_outcomes]{paper_field_outcomes()}}.}
 
 \item{max_papers}{Show at most this many papers, worst first; \code{NULL} shows
 all of them. The subtitle says when papers were left out.}
+
+\item{labels}{Side labels; see \code{\link[=side_labels]{side_labels()}}.}
 }
 \value{
 A ggplot.

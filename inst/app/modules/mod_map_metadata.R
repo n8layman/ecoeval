@@ -14,12 +14,12 @@
 # The tables that need a paper key, in the order they are shown.
 paper_tables <- function(rv) {
   defs <- list(
-    ai          = list(key = "ai", label = "AI records", df = rv$ai_raw),
-    gold        = list(key = "gold", label = "Gold standard records",
+    ai          = list(key = "ai", label = paste(lab()$ai, "records"), df = rv$ai_raw),
+    gold        = list(key = "gold", label = paste(lab()$gold, "records"),
                        df = rv$gold_raw),
-    ai_papers   = list(key = "ai_papers", label = "AI paper list",
+    ai_papers   = list(key = "ai_papers", label = paste(lab()$ai, "paper list"),
                        df = rv$ai_papers_raw),
-    gold_papers = list(key = "gold_papers", label = "Gold paper list",
+    gold_papers = list(key = "gold_papers", label = paste(lab()$gold, "paper list"),
                        df = rv$gold_papers_raw)
   )
   Filter(function(d) !is.null(d$df), defs)
@@ -170,8 +170,9 @@ mod_map_metadata_server <- function(id, rv) {
       rv$paper_map <- NULL
       rv$scope <- NULL
       rv$warnings <- unique(c(rv$warnings, res$warnings))
-      status(sprintf("%d AI records and %d gold records placed.",
-                     sum(!is.na(rv$ai$.paper)), sum(!is.na(rv$gold$.paper))))
+      status(sprintf("%d %s records and %d %s records placed.",
+                     sum(!is.na(rv$ai$.paper)), lab()$ai,
+                     sum(!is.na(rv$gold$.paper)), lab()$gold))
       rv$stage <- "papers"
     })
   })

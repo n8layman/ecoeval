@@ -67,15 +67,18 @@ plot_column_accuracy <- function(fm) {
 #' A confusion matrix as a tile plot
 #'
 #' @param cc The result of [column_confusion()].
+#' @param labels Side labels; see [side_labels()].
 #' @return A ggplot.
 #' @export
-plot_confusion <- function(cc) {
+plot_confusion <- function(cc, labels = current_labels()) {
+  labels <- as_side_labels(labels)
   m <- cc$matrix
   if (is.null(m) || !nrow(m)) return(empty_plot("Nothing to plot for this column."))
   m$label <- ifelse(m$n > 0, as.character(m$n), "")
   subtitle <- switch(
     cc$type,
-    class = "Gold class by AI class. '(not in schema)' holds values the enum has no slot for.",
+    class = sprintf("%s class by %s class. '(not in schema)' holds values the enum has no slot for.",
+                    labels$gold, labels$ai),
     presence = "Presence and absence. The populated-by-both cell is split into correct and wrong value.",
     numeric = "Presence and absence; see the error distribution for how wrong the numbers are.",
     NULL
@@ -87,7 +90,7 @@ plot_confusion <- function(cc) {
                        colour = ecoeval_palette()[["ink"]]) +
     ggplot2::scale_fill_gradient(low = "#f2f6fa", high = ecoeval_palette()[["ai"]],
                                  guide = "none") +
-    ggplot2::labs(x = "AI", y = "Gold standard", title = cc$field,
+    ggplot2::labs(x = labels$ai, y = labels$gold, title = cc$field,
                   subtitle = subtitle) +
     eco_theme() +
     ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 30, hjust = 1))
@@ -121,16 +124,19 @@ plot_threshold <- function(profile, threshold = 0.85) {
     eco_theme()
 }
 
-#' Fill rates, AI against gold
+#' Fill rates, one side against the other
 #'
 #' @param fills A tibble from [fill_rates()].
+#' @param labels Side labels; see [side_labels()].
 #' @return A ggplot.
 #' @export
-plot_completeness <- function(fills) {
+plot_completeness <- function(fills, labels = current_labels()) {
+  labels <- as_side_labels(labels)
   if (!nrow(fills)) return(empty_plot("No columns to profile yet."))
   d <- tibble::tibble(
     field = rep(fills$field, 2),
-    source = rep(c("AI", "Gold"), each = nrow(fills)),
+    source = factor(rep(c(labels$ai, labels$gold), each = nrow(fills)),
+                    levels = c(labels$ai, labels$gold)),
     fill = c(fills$ai_fill, fills$gold_fill)
   )
   d$field <- factor(d$field, levels = rev(fills$field))
@@ -138,15 +144,16 @@ plot_completeness <- function(fills) {
                                   fill = .data$source)) +
     ggplot2::geom_col(position = ggplot2::position_dodge(width = 0.75),
                       width = 0.7) +
-    ggplot2::scale_fill_manual(values = c(AI = ecoeval_palette()[["ai"]],
-                                          Gold = ecoeval_palette()[["gold"]]),
+    ggplot2::scale_fill_manual(values = stats::setNames(
+                                 unname(ecoeval_palette()[c("ai", "gold")]),
+                                 c(labels$ai, labels$gold)),
                                name = NULL) +
     ggplot2::scale_y_continuous(labels = function(x) paste0(100 * x, "%"),
                                 limits = c(0, 1), expand = c(0, 0)) +
     ggplot2::coord_flip() +
     ggplot2::labs(x = NULL, y = "Populated",
                   title = "Who fills in what",
-                  subtitle = "A field humans always populate and the AI rarely does is usually a field-description problem") +
+                  subtitle = "A field one side always populates and the other rarely does is usually a field-description problem") +
     eco_theme()
 }
 
@@ -154,9 +161,11 @@ plot_completeness <- function(fills) {
 #'
 #' @param errors The `errors` element of a [column_confusion()] result.
 #' @param field Column name, for the title.
+#' @param labels Side labels; see [side_labels()].
 #' @return A ggplot.
 #' @export
-plot_error_distribution <- function(errors, field = "") {
+plot_error_distribution <- function(errors, field = "", labels = current_labels()) {
+  labels <- as_side_labels(labels)
   if (is.null(errors) || !nrow(errors)) {
     return(empty_plot("No pairs where both sides had a number."))
   }
@@ -165,7 +174,7 @@ plot_error_distribution <- function(errors, field = "") {
                             colour = "white") +
     ggplot2::geom_vline(xintercept = 0, colour = ecoeval_palette()[["ink"]],
                         linewidth = 0.6) +
-    ggplot2::labs(x = "AI minus gold", y = "Pairs",
+    ggplot2::labs(x = sprintf("%s minus %s", labels$ai, labels$gold), y = "Pairs",
                   title = paste0("How wrong the numbers are", 
                                  if (nzchar(field)) paste0(": ", field) else "")) +
     eco_theme()
@@ -174,12 +183,16 @@ plot_error_distribution <- function(errors, field = "") {
 #' Record-level outcome, as one stacked bar
 #'
 #' @param rm_ A tibble from [record_metrics()].
+#' @param labels Side labels; see [side_labels()].
 #' @return A ggplot.
 #' @export
-plot_record_outcome <- function(rm_) {
+plot_record_outcome <- function(rm_, labels = current_labels()) {
+  labels <- as_side_labels(labels)
+  only_ai <- paste0(side_only(labels, "ai"), cm_tag(labels, "FP"))
+  only_gold <- paste0(side_only(labels, "gold"), cm_tag(labels, "FN"))
   d <- tibble::tibble(
-    outcome = factor(c("Matched", "AI only (FP)", "Gold only (FN)"),
-                     levels = c("Gold only (FN)", "AI only (FP)", "Matched")),
+    outcome = factor(c("Matched", only_ai, only_gold),
+                     levels = c(only_gold, only_ai, "Matched")),
     n = c(rm_$tp, rm_$fp, rm_$fn)
   )
   if (sum(d$n) == 0L) return(empty_plot("No records in scope."))
@@ -188,13 +201,13 @@ plot_record_outcome <- function(rm_) {
     ggplot2::geom_col(width = 0.65) +
     ggplot2::geom_text(ggplot2::aes(label = .data$n), hjust = -0.3, size = 3.4,
                        colour = "#6b7280") +
-    ggplot2::scale_fill_manual(values = c(
-      "Matched" = ecoeval_palette()[["green"]],
-      "AI only (FP)" = ecoeval_palette()[["purple"]],
-      "Gold only (FN)" = ecoeval_palette()[["orange"]]
+    ggplot2::scale_fill_manual(values = stats::setNames(
+      unname(ecoeval_palette()[c("green", "purple", "orange")]),
+      c("Matched", only_ai, only_gold)
     ), guide = "none") +
     ggplot2::scale_x_continuous(expand = ggplot2::expansion(mult = c(0, 0.15))) +
-    ggplot2::labs(x = "Records", y = NULL, title = "Did the AI find the right rows?") +
+    ggplot2::labs(x = "Records", y = NULL,
+                  title = "Records matched, and on one side only") +
     eco_theme()
 }
 
@@ -257,9 +270,11 @@ parse_tile_key <- function(key) {
 #' @param grid A tibble from [paper_field_outcomes()].
 #' @param max_papers Show at most this many papers, worst first; `NULL` shows
 #'   all of them. The subtitle says when papers were left out.
+#' @param labels Side labels; see [side_labels()].
 #' @return A ggplot.
 #' @export
-plot_paper_heatmap <- function(grid, max_papers = 60) {
+plot_paper_heatmap <- function(grid, max_papers = 60, labels = current_labels()) {
+  labels <- as_side_labels(labels)
   if (!NROW(grid)) return(empty_plot("Nothing scored yet."))
   d <- grid
   # Sort on what disagrees, so an unscored tile does not read as a problem.
@@ -294,9 +309,10 @@ plot_paper_heatmap <- function(grid, max_papers = 60) {
            sprintf("%s of cells agree", fmt_share(d$agreement))),
     ifelse(
       d$n_cells == 0L, "No records on either side",
-      sprintf("%d %s: %d agree, %d differ, %d only in the gold standard, %d only in the AI%s",
+      sprintf("%d %s: %d agree, %d differ, %d %s, %d %s%s",
               d$n_cells, ifelse(d$n_cells == 1L, "row", "rows"), d$n_agree,
-              d$n_disagree, d$n_only_gold, d$n_only_ai,
+              d$n_disagree, d$n_only_gold, side_only(labels, "gold"),
+              d$n_only_ai, side_only(labels, "ai"),
               ifelse(d$n_blank > 0L,
                      sprintf(", %d blank on both sides", d$n_blank), ""))
     ),
@@ -370,15 +386,17 @@ plot_paper_heatmap <- function(grid, max_papers = 60) {
 #'   `paste(pair_id, field)`.
 #' @param focus A column to outline, typically the one clicked in the overview.
 #' @param paper The paper's identifier, for the title.
+#' @param labels Side labels; see [side_labels()].
 #' @return A ggplot.
 #' @export
 plot_record_heatmap <- function(grid, violations = character(0), focus = NULL,
-                                paper = NULL) {
+                                paper = NULL, labels = current_labels()) {
+  labels <- as_side_labels(labels)
   if (!NROW(grid)) return(empty_plot("Nothing to compare in this paper."))
   d <- grid
   d$label <- factor(d$label, levels = rev(unique(d$label)))
   d$field <- factor(d$field, levels = unique(as.character(d$field)))
-  d$outcome <- factor(d$outcome, levels = names(outcome_labels()))
+  d$outcome <- factor(d$outcome, levels = names(outcome_labels(labels)))
   d$key <- paste(d$pair_id, d$field, sep = TILE_KEY_SEP)
   d$bad <- paste(d$pair_id, d$field) %in% violations
 
@@ -393,10 +411,11 @@ plot_record_heatmap <- function(grid, violations = character(0), focus = NULL,
     paste0(value(orig), ifelse(changed, paste0(" (compared as ", value(compared), ")"), ""))
   }
   d$text <- paste(
-    sprintf("%s (%s)", as.character(d$label), d$kind), as.character(d$field),
-    unname(outcome_labels()[as.character(d$outcome)]),
-    paste0("AI: ", said("ai")),
-    paste0("Gold: ", said("gold")),
+    sprintf("%s (%s)", as.character(d$label), record_kind_label(d$kind, labels)),
+    as.character(d$field),
+    unname(outcome_labels(labels)[as.character(d$outcome)]),
+    paste0(labels$ai, ": ", said("ai")),
+    paste0(labels$gold, ": ", said("gold")),
     ifelse(d$bad, "Fails schema validation", ""),
     sep = "\n"
   )
@@ -411,7 +430,7 @@ plot_record_heatmap <- function(grid, violations = character(0), focus = NULL,
   stub <- tibble::tibble(
     field = factor(levels(d$field)[[1L]], levels = levels(d$field)),
     label = factor(levels(d$label)[[1L]], levels = levels(d$label)),
-    outcome = factor(names(fills), levels = names(outcome_labels()))
+    outcome = factor(names(fills), levels = names(outcome_labels(labels)))
   )
 
   p <- ggplot2::ggplot(d, ggplot2::aes(x = .data$field, y = .data$label,
@@ -434,7 +453,7 @@ plot_record_heatmap <- function(grid, violations = character(0), focus = NULL,
   p +
     # limits, not just drop = FALSE: an outcome absent from this paper still
     # belongs in the legend, so that four colours always mean four things.
-    ggplot2::scale_fill_manual(values = fills, labels = outcome_labels(),
+    ggplot2::scale_fill_manual(values = fills, labels = outcome_labels(labels),
                                limits = names(fills), drop = FALSE, name = NULL) +
     ggplot2::guides(fill = ggplot2::guide_legend(nrow = 2, byrow = TRUE)) +
     ggplot2::scale_x_discrete(labels = function(x) truncate_label(x, 22, "start"),

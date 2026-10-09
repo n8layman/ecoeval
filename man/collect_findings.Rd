@@ -13,7 +13,8 @@ collect_findings(
   collapses = NULL,
   dropped_fields = character(0),
   linkage_fields = character(0),
-  recurring_at = 3L
+  recurring_at = 3L,
+  labels = current_labels()
 )
 }
 \arguments{
@@ -37,6 +38,9 @@ identity columns all disagree.}
 
 \item{recurring_at}{Count at which an out-of-enum value reads as a missing
 category rather than a typo.}
+
+\item{labels}{Side labels for the wording; see \code{\link[=side_labels]{side_labels()}}. The \code{group}
+codes stay \code{"schema"}, \code{"model"}, \code{"gold"}.}
 }
 \value{
 A tibble with \code{group} (\code{"schema"}, \code{"model"}, or \code{"gold"}),
