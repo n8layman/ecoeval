@@ -171,8 +171,15 @@ what the paper-link review guards against.
 ## Workflow
 
 1. **Load** — four data inputs plus `schema.json`
-2. **Map metadata fields** — must precede paper alignment; we need to know
-   which gold column holds the DOI, author, year
+2. **Identify the papers** — must precede paper alignment; we need to know
+   what names a paper. Detected rather than asked for, working down a fixed
+   priority list: DOI, then file name, then title, then first author + year.
+   An identifier can span more than one column, which is why a paper key is a
+   vector of columns with a role each. The same list is applied to every table
+   at once, so the two sources produce keys of the same kind; the metadata
+   paper alignment falls back on (title, author, year) comes from the same
+   role detection. A column picker is still there for when detection is wrong,
+   folded away.
 3. **Paper alignment** — fastLink on paper metadata, human accepts. Sets scope.
 4. **Map record fields** — column mapping, column selection, comparator config,
    pick linkage fields
@@ -235,7 +242,7 @@ Rules for the judge:
 - **Cache verdicts into `run_config.json`.** LLM output varies between calls,
   so a reproducible run needs them frozen rather than re-derived.
 - **Rationale surfaces in the cell modal**, alongside both values and which rung
-  of the cascade decided it. That makes every yellow cell auditable.
+  of the cascade decided it. That makes every contested cell auditable.
 
 `ecoreview::standardize_name_vector()` already does LLM name harmonization via
 `ellmer`, so the plumbing exists — but it's biology-specific, so users assign it
@@ -274,7 +281,7 @@ So the order is:
 
 Two consequences:
 
-- **Display originals, compare normalized.** The grid shows what was actually
+- **Display originals, compare normalized.** The modal shows what was actually
   recorded; the modal shows the normalized forms and which drove the verdict.
 - **The collapse check runs on normalized values.** `"M. lucifugus"` and
   `"Myotis lucifugus"` should collapse together; running it raw undercounts.
@@ -283,7 +290,7 @@ Two consequences:
 
 Validate AI and gold values against the schema (enum membership, type). Run it
 as a pre-flight check, warn if either side has exceptions, and **mark the
-offending cells in the grid**.
+offending cells**.
 
 The warning lists the non-conforming values **with their frequencies**, because
 that's all the user needs to read the situation themselves:
@@ -350,7 +357,7 @@ the same rhythm as ecoreview's document-at-a-time flow, which users already
 know.
 
 That keeps everything bounded. A single paper holds at most ~100 records and
-usually far fewer, so the grid is small, rendering is unremarkable, and recompute
+usually far fewer, so the heatmap is small, rendering is unremarkable, and recompute
 on every edit is free. There is never a ten-thousand-row grid to virtualize.
 
 A **progress indicator** sits alongside, tracking the three states described
@@ -360,27 +367,62 @@ always knows how the current numbers were produced.
 Paper-by-paper is the **iteration** path, not a mandatory gate. Someone who only
 wants an accuracy figure never has to open this screen.
 
-### The grid — for the current paper
+### The heatmap — for the current paper
 
 - **Rows**: every record from both sides for this paper — matched pairs, then
-  AI-only, then gold-only.
-- **Columns**: evaluated fields, with **identity columns** — the linkage fields
-  chosen in Stage 4 — pinned left and rendered as text (AI value over gold
-  value), the way a spreadsheet freezes ID columns. That's what makes the scan
-  fast.
-- Remaining columns are color-coded; click any cell for a modal.
-- Gold columns with no AI counterpart (and vice versa) are excluded from the
-  grid entirely — there is nothing to compare — but they're reported as a
-  finding so the omission is visible.
-- Optional toggle to expand every row into two lines (AI / gold) when reading
-  values across the whole grid.
+  AI-only, then gold-only — named from the **identity columns** (the linkage
+  fields chosen in Stage 4), taking the gold standard's values as the reference
+  and falling back to the AI's for a row the gold standard does not have.
+- **Columns**: evaluated fields, identity columns first, the way a spreadsheet
+  freezes its ID columns.
+- **Every tile is one cell**: one record's value for one column. Nothing is
+  aggregated, which is what makes the four colours mean what they say here and
+  nowhere else.
+- Gold columns with no AI counterpart (and vice versa) are excluded entirely —
+  there is nothing to compare — but they're reported as a finding so the
+  omission is visible.
+- Hovering a tile gives both values; clicking it opens the modal.
+
+This replaced a table of colour-coded values. The table showed more at once,
+but it made the reader do the work the colours are for: a wall of text with
+colour as decoration, rather than a shape with the text one click away. The
+values are not lost — the tooltip carries both, the modal carries them in full
+with the quoted sentences beside them.
+
+Four colours, and they mean the same thing everywhere a tile is one cell — this
+heatmap and the exported table:
 
 | Color | Meaning |
 |---|---|
-| Green | Matched pair — values agree under that column's comparator |
-| Yellow | Matched pair — values disagree |
-| Orange | Gold-only record |
-| Purple | AI-only record |
+| Green | The two sides agree — on a value, or on there being no value |
+| Purple | Both sides have a value and they differ |
+| Yellow | Only the gold standard has a value |
+| Orange | Only the AI has a value |
+
+Seven cell states, four colours, and two collapses do the work. Whether a
+one-sided value came from an unpaired record or from a blank on one side of a
+paired one is a detail of the **alignment**, not of the finding — both mean
+"one side has this and the other does not" — so they colour the same. And a
+column *neither* side filled in is agreement: they agree there is nothing
+there. Green means "nothing to fix here", which is exactly what a mutually
+empty column is.
+
+Colour is not the accounting. A both-blank cell is still a true negative and
+still drops out of accuracy, precision and recall, because a field neither
+party filled in says nothing about extraction quality. The states stay separate
+where it matters: the metrics are computed over states, not colours.
+
+The hues are checked rather than chosen by eye. Green against orange is the
+pair that protanopia and deuteranopia flatten, so the orange is deep enough to
+separate on lightness as well as hue; the four pass an all-pairs CVD check
+against the chart surface.
+
+**The rule that governs where these colours may be used: a tile has to be one
+cell.** The overview on the dashboard covers several records per tile, and a
+tile holding nine agreements and one disagreement would paint identically to
+one holding ten disagreements — so it shades a rate instead. Four colours for
+four outcomes, a ramp for a mixture of them. Getting this wrong is subtle and
+expensive: the picture looks authoritative either way.
 
 **Schema violations are marked, not coloured.** A value failing enum or type
 validation gets a marker or outline on the cell rather than a fifth fill
@@ -390,14 +432,15 @@ carries validity.
 
 **The cell modal** shows both values, which rung of the comparator cascade
 decided the result, and — where the LLM judge was the decider — its rationale.
-Any schema violation is named there too. That makes every yellow cell
+Any schema violation is named there too. That makes every contested cell
 auditable, which matters when someone challenges a number.
 
 ### The three operations
 
 At the **row** level, the user fixes the pairing:
 
-- **Reject a link** → the pair de-links into an orange row and a purple row
+- **Reject a link** → the pair de-links into a yellow gold-only row and an
+  orange AI-only row
 - **Link two orphans** → select an AI-only row and a gold-only row, join them
 
 At the **cell** level, the user fixes the verdict:
@@ -530,8 +573,9 @@ misclassification is a false positive for the value asserted and a false
 negative for the value missed.
 
 **Useful property:** a wrongly-linked pair that disagrees on everything
-produces FP + FN per column — the same as leaving those rows unlinked (purple
-gives FP, orange gives FN). So linking earns nothing except where fields
+produces FP + FN per column — the same as leaving those rows unlinked (the
+orange AI-only row gives FP, the yellow gold-only row gives FN). So linking
+earns nothing except where fields
 genuinely agree, and bad links cannot inflate field accuracy. Field-level
 metrics are largely robust to alignment error. Record-level metrics are not —
 pairing two records converts 1 FP + 1 FN into 1 TP — which is exactly the
@@ -572,10 +616,92 @@ Two numbers, plain labels — no micro/macro jargon:
 
 They diverge when fill rates are uneven, and the gap is itself informative.
 
+### The overview heatmap — every paper, every column
+
+Rows are papers, columns are the gold standard's columns, one tile per
+(paper, column). It is the first thing on the dashboard because it is the only
+view that shows the *shape* of a run rather than its summary statistics.
+
+**A tile shades a rate**, not an outcome: the share of that paper's cells that
+agree on that column, dark for all of them and pale for few, with a neutral
+grey where there was nothing to score. It cannot use the four outcome colours,
+because a tile here covers several records and those colours describe one cell.
+The rate is `n_agree / n_scored`, the same accuracy `field_metrics()` reports,
+so the map and the numbers under it are the same arithmetic twice. Clicking a
+tile opens that paper, where the tiles *are* single cells and the colours come
+back.
+
+The ramp is one hue, light to dark, and its light end deliberately stops short
+of white: a tile at zero agreement is the one a reader most needs to see, and a
+near-white tile on a white page is the one they see least. It passes the
+ordinal checks — monotone lightness, visible step gaps, one hue, light end
+clear of the surface — and the grey for "nothing scored" sits well outside the
+ramp rather than reading as a paler step of it.
+
+**The cells underneath are the confusion matrix.** The four colours are its
+boxes, and every number the dashboard reports is those colours added up:
+
+| Colour | Cells | Contributes |
+|---|---|---|
+| green | both sides agree on a value | TP |
+| purple | both have a value and they differ | FP **and** FN |
+| yellow | only the gold standard has a value | FN — a miss |
+| orange | only the AI has a value | FP |
+| green | neither side has a value | TN — drops out |
+
+`confusion_totals()` is that table computed, and it ties out with
+`field_metrics()` and `aggregate_metrics()` by construction — same
+`state_contributions()` underneath, so there is no second calculation to drift.
+
+**The matrix sits under the chart**, drawn as the four boxes it is — AI has a
+value or not, against gold has a value or not — with the populated-by-both box
+split into *agree* and *differ*, and every box painted the colour of the tiles
+it counts. Under it, the arithmetic written out (`precision = 57 / 92 =
+62.0%`), because "the colours are the metrics" is a claim worth being able to
+check rather than take on trust.
+
+**Clicking a column name** in the heatmap narrows that matrix to that column,
+and moves the per-column detail panel to it as well: one click, both views. The
+matrix is the same five boxes either way — a column's confusion matrix is the
+whole run's, computed over fewer cells — so nothing new has to be learned to
+read it. Plotly emits click events for data points but not for axis labels, so
+the ticks get one delegated handler on the widget; delegated because plotly
+rebuilds its ticks on resize and a handler bound to the tick itself would not
+survive. The static fallback reads it off the click coordinates instead: below
+the first row is the axis, not a tile.
+
+The one place the correspondence is not literal: a tile covers every row of
+that paper's comparison, so it *aggregates* where the tally counts each cell.
+The chart says where to look, the tally says how much there is.
+
+Hovering a tile gives the counts behind it — how many rows agreed, differed,
+were only in the gold standard, only in the AI, and blank on both sides — where
+"they agreed on a value" and "neither of them had one" are told apart. A row
+there is one line of that paper's comparison: a matched pair counts once, an
+unmatched record counts as itself.
+
+Both axes are sorted worst-first, which is what turns the chart from decoration
+into diagnosis: it pulls a bad column into a pale vertical band and a bad paper
+into a pale horizontal one, and those two patterns have different causes. A
+column that fails across every paper is usually a comparator or schema problem;
+a paper that fails across every column is usually a bad alignment. Past 60
+papers it shows the worst ones and says how many it left out, because a wall of
+pixels is not a chart.
+
+A paper in scope with nothing scored still gets a row, shaded as the neutral:
+there is no rate to report when neither side produced a record. The hover says
+"no records on either side".
+
+**Clicking a tile opens that paper** in the comparison view, with the clicked
+column outlined. There is no modal here: a tile covers several records, so
+there is nothing exact to put in one. The overview says where to look; the
+comparison view is where you look, and there a click lands on a single cell
+with both values and the sentences each side quoted for them.
+
 ### Column-wise accuracy chart
 
 Sorted worst → best. The triage view — but read it carefully, because a column
-that is uniformly yellow has three possible causes and the tool can't tell them
+that fails everywhere has three possible causes and the tool can't tell them
 apart:
 
 1. **A misconfigured comparator** — exact matching on a date column with two
@@ -672,7 +798,7 @@ restore, and download share one implementation.
 
 ```
 ecoeval_run_2026-08-31/
-  aligned_table.csv        one row per aligned record, mirrors the grid
+  aligned_table.csv        one row per aligned record, the values in full
   aligned_table_long.csv   tidy: one row per record × field, for pivoting
   metrics.xlsx             one sheet per field + summary sheet
   findings.csv             findings, grouped schema / model / gold
@@ -810,10 +936,10 @@ inst/app/
   app.R              thin — assembles modules, holds the top-level reactives
   modules/
     mod_load.R           the five inputs + consistency checks
-    mod_map_metadata.R   metadata field mapping
+    mod_map_metadata.R   paper identity -- detect, show, override
     mod_align_papers.R   paper alignment, sets scope
     mod_map_records.R    field mapping, comparators, linkage fields
-    mod_compare.R        the per-paper grid — the big one
+    mod_compare.R        the per-paper heatmap and the cell modal
     mod_dashboard.R      metrics, matrices, charts
   www/
 R/
@@ -926,10 +1052,12 @@ caller's RNG state afterwards.
   money until they have failed, and a run with no API key reports those cells as
   *unjudged* rather than scoring reworded prose as wrong.
 * **A blank on one side of a matched pair is not a full disagreement.** The
-  accounting table says yellow contributes FP + FN, but the purple and orange
-  rows both carry the qualifier "with a value". Applying it consistently: a pair
-  where the AI is blank and the gold has a value contributes FN only, and the
-  reverse contributes FP only. Both still render yellow.
+  accounting table says a disagreement contributes FP + FN, but the AI-only and
+  gold-only rows both carry the qualifier "with a value". Applying it
+  consistently: a pair where the AI is blank and the gold has a value
+  contributes FN only, and the reverse contributes FP only. They colour as what
+  they are — only in the gold standard, only in the AI — rather than as
+  disagreements.
 * **Triage also flags pairs whose identity columns all disagree**, not only
   pairs that agree on nothing. The narrower rule missed a genuinely mispaired
   record in the fixtures that happened to agree on country and year.
@@ -950,7 +1078,7 @@ Recorded so they don't creep back:
   already making by hand. The collapse check is the cheap version that survives.
 - **Gold-standard exhaustiveness machinery** — no assertion flag, no gating of
   precision metrics, no adjudication sampling, no coverage estimation. A pile of
-  purple AI-only rows *is* the signal; humans go update the gold standard.
+  orange AI-only rows *is* the signal; humans go update the gold standard.
 - **Linkage confusion matrix** — replaced by a one-line status.
 - **Threshold-sensitivity plot** — little left to vary without a floor.
 - **Paper-level scoring** — papers are scope, not a scored entity.

@@ -69,7 +69,8 @@ The app is a wizard with a persistent progress rail. Stages are revisitable
 without redoing everything downstream:
 
 1. **Load** — the five inputs
-2. **Map metadata fields** — which column holds the DOI, the title, the year
+2. **Identify the papers** — which column identifies a paper; detected in a
+   fixed priority order (DOI, file name, title, first author + year)
 3. **Align papers** — sets scope
 4. **Map record fields** — column mapping, comparators, identity columns
 5. **Compare** — one paper at a time; alignment review *and* results on one screen
@@ -171,7 +172,7 @@ export_bundle(
 
 ```
 ecoeval_run_2026-08-31/
-  aligned_table.csv        one row per aligned record, mirrors the grid
+  aligned_table.csv        one row per aligned record, the values in full
   aligned_table_long.csv   tidy: one row per record x field, for pivoting
   metrics.xlsx             one sheet per field + summary sheet
   findings.csv             findings, grouped schema / model / gold

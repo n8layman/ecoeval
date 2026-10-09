@@ -20,7 +20,7 @@ for (f in list.files("modules", pattern = "[.][Rr]$", full.names = TRUE)) {
 
 STAGES <- c(
   load      = "Load the inputs",
-  metadata  = "Map metadata fields",
+  metadata  = "Identify the papers",
   papers    = "Align papers",
   fields    = "Map record fields",
   compare   = "Compare",

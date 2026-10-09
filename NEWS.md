@@ -31,11 +31,55 @@ launching an app. `evaluate_extraction()` runs the whole pipeline headlessly.
 ## The app
 
 `run_eval_app()` is a six-stage wizard with a persistent progress rail, one
-module per stage under `inst/app/modules/`. The comparison grid shows one paper
-at a time with the identity columns pinned left, colour by agreement and an
-outline for schema violations, a cell modal naming which rung decided each
-verdict, and the three manual operations -- reject a link, link two orphans,
+module per stage under `inst/app/modules/`. **What identifies a paper is
+detected, not asked for**: `suggest_paper_key()` works down a fixed priority
+list -- DOI, then file name, then title, then first author + year -- over every
+table at once, so both sources are keyed the same way and their keys are
+comparable. An identifier may span more than one column, and each column is
+normalised for the role it plays, so `https://doi.org/10.1000/P01` and
+`10.1000/p01` are one paper. The column picker is still there, folded away, for
+when detection is wrong.
+
+**Two heatmaps, and the difference between them is the point.**
+
+The comparison view shows **one paper at a time**: rows are its records --
+matched pairs, then AI-only, then gold-only, named from the identity columns --
+columns are the scored fields, and every tile is a single cell. That is where
+the four colours mean what they say: **green** the two sides agree, **purple**
+both have a value and they differ, **yellow** only the gold standard has a
+value, **orange** only the AI does. Seven cell states, four colours -- whether a
+one-sided value came from an unpaired record or a blank in a paired one is a
+detail of the alignment, not of the finding, and a column neither side filled
+in is agreement about absence (colour only: a both-blank cell is still a true
+negative and still drops out of accuracy). Schema violations are marked with a
+dot rather than coloured, because validity is orthogonal to agreement. Clicking
+a tile opens what the AI got, what the gold standard got, **the sentences each
+side quoted for them**, which rung of the cascade decided it and against what
+cutoff, and the three manual operations -- reject a link, link two orphans,
 override a cell -- each recomputing every metric immediately.
+
+The dashboard opens on **the overview**: every paper against every column,
+shaded by the share of that paper's cells that agree. It cannot use the four
+colours, because a tile there covers several records and a tile holding nine
+agreements and one disagreement would paint identically to one holding ten
+disagreements. The rate is the accuracy `field_metrics()` reports, so the map
+and the numbers under it are the same arithmetic twice. Both axes sort
+worst-first: a pale vertical band is a column that fails everywhere (usually a
+comparator or schema problem), a pale horizontal one is a paper that fails
+everywhere (usually a bad alignment). Clicking a tile opens that paper in the
+comparison view with the column outlined.
+
+The cells underneath are the confusion matrix, and the colours are its boxes:
+green a true positive, yellow a false negative, orange a false positive, purple
+both at once, a mutually blank cell the true negative that drops out. **The
+matrix sits under the chart**, drawn as its four boxes with each painted the
+colour of the cells it counts, and the arithmetic written out below it.
+`confusion_totals()` ties out with `field_metrics()` and `aggregate_metrics()`
+by construction. **Clicking a column name** narrows the matrix to that column
+and moves the per-column detail panel with it. The hues are checked for
+colour-vision separation rather than picked by eye -- green against orange is
+the pair that needed the work, and the ramp's light end stops short of white so
+a zero-agreement tile is the one you see, not the one you miss.
 
 Press **Use the bundled example** on the load screen to try it against the
 synthetic fixtures, each row of which exercises a specific case.

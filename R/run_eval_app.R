@@ -87,7 +87,8 @@ app_directory <- function() {
 #'   canonical form.
 #' @param schema Path to `schema.json`, or an `ecoeval_schema`.
 #' @param ai_papers,gold_papers Optional paper list paths or tibbles.
-#' @param paper_col Column holding the paper identifier. Guessed when `NULL`.
+#' @param paper_key The columns identifying the paper -- see [paper_key()].
+#'   Detected per table when `NULL`.
 #' @param linkage_fields Linkage fields. Defaults to the schema suggestion.
 #' @param judge An optional judge from [make_judge()].
 #'
@@ -96,32 +97,29 @@ app_directory <- function() {
 #' @export
 evaluate_extraction <- function(ai, gold, schema,
                                 ai_papers = NULL, gold_papers = NULL,
-                                paper_col = NULL, linkage_fields = NULL,
+                                paper_key = NULL, linkage_fields = NULL,
                                 judge = NULL) {
   schema <- if (inherits(schema, "ecoeval_schema")) schema else read_schema(schema)
 
-  load_side <- function(x, prefix, mapping = NULL) {
-    if (is.data.frame(x) && ".rid" %in% names(x)) return(x)
-    raw <- if (is.data.frame(x)) x else read_table_any(x)
-    pc <- paper_col %||% suggest_paper_column(raw)
-    prepare_records(raw, pc, mapping, prefix = prefix)
-  }
   ai_raw <- if (is.data.frame(ai)) ai else read_table_any(ai)
   gold_raw <- if (is.data.frame(gold)) gold else read_table_any(gold)
 
-  ai_pc <- paper_col %||% suggest_paper_column(ai_raw)
-  gold_pc <- paper_col %||% suggest_paper_column(gold_raw)
-  ai_map <- suggest_mapping(setdiff(names(ai_raw), ai_pc), schema$fields$field)
-  gold_map <- suggest_mapping(setdiff(names(gold_raw), gold_pc), schema$fields$field)
+  ai_key <- as_paper_key(paper_key, ai_raw)
+  gold_key <- as_paper_key(paper_key, gold_raw)
+  key_cols <- function(k) if (is.null(k)) character(0) else k$columns
+  ai_map <- suggest_mapping(setdiff(names(ai_raw), key_cols(ai_key)),
+                            schema$fields$field)
+  gold_map <- suggest_mapping(setdiff(names(gold_raw), key_cols(gold_key)),
+                              schema$fields$field)
   to_named <- function(m) stats::setNames(m$from[!is.na(m$to)], m$to[!is.na(m$to)])
 
-  ai_c <- prepare_records(ai_raw, ai_pc, to_named(ai_map), prefix = "a")
-  gold_c <- prepare_records(gold_raw, gold_pc, to_named(gold_map), prefix = "g")
+  ai_c <- prepare_records(ai_raw, ai_key, to_named(ai_map), prefix = "a")
+  gold_c <- prepare_records(gold_raw, gold_key, to_named(gold_map), prefix = "g")
 
   load_papers <- function(x) {
     if (is.null(x)) return(NULL)
     raw <- if (is.data.frame(x)) x else read_table_any(x)
-    prepare_papers(raw, suggest_paper_column(raw))
+    prepare_papers(raw, paper_key, paper_metadata_columns(raw))
   }
   ai_p <- load_papers(ai_papers)
   gold_p <- load_papers(gold_papers)

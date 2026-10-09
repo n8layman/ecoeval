@@ -68,13 +68,24 @@ reference:
       - read_table_any
       - list_db_tables
       - read_ecoextract_documents
-      - suggest_paper_column
       - suggest_mapping
       - prepare_records
       - prepare_papers
       - paper_set
       - compute_scope
       - coverage_warning
+
+  - title: What identifies a paper
+    desc: >
+      Detected rather than asked for, in a fixed priority order: DOI, file
+      name, title, first author and year. An identifier may span more than one
+      column.
+    contents:
+      - suggest_paper_key
+      - paper_key
+      - paper_key_candidates
+      - paper_key_values
+      - paper_metadata_columns
 
   - title: The schema
     desc: >
@@ -86,6 +97,7 @@ reference:
       - default_comparator_config
       - check_conformance
       - unschematised_fields
+      - evidence_field
 
   - title: The comparator cascade
     desc: >
@@ -140,6 +152,11 @@ reference:
       - fill_rates
       - state_contributions
       - state_colour
+      - cell_outcome
+      - outcome_labels
+      - confusion_totals
+      - paper_field_outcomes
+      - record_field_outcomes
       - progress_summary
       - suspect_pairs
 
@@ -155,6 +172,9 @@ reference:
 
   - title: Charts
     contents:
+      - plot_paper_heatmap
+      - plot_record_heatmap
+      - parse_tile_key
       - plot_column_accuracy
       - plot_confusion
       - plot_threshold

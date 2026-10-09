@@ -15,9 +15,9 @@ new_app_state <- function() {
     ai_papers_raw = NULL, gold_papers_raw = NULL,
     schema = NULL,
 
-    # which column holds what
-    ai_paper_col = NULL, gold_paper_col = NULL,
-    ai_papers_col = NULL, gold_papers_col = NULL,
+    # which columns identify a paper -- one ecoeval_paper_key per table
+    ai_paper_key = NULL, gold_paper_key = NULL,
+    ai_papers_key = NULL, gold_papers_key = NULL,
     metadata_fields = character(0),
 
     # canonical form
@@ -41,6 +41,9 @@ new_app_state <- function() {
     warnings = character(0),
     blocked = NULL,
     current_paper = NULL,
+    # The column the overview asked the comparison view to look at, outlined
+    # there until the reader moves to another paper.
+    focus_field = NULL,
     dirty = 0L
   )
 }
@@ -76,6 +79,104 @@ scored_fields <- function(rv) {
 identity_fields <- function(rv) {
   if (is.null(rv$comparators)) return(character(0))
   rv$comparators$field[rv$comparators$linkage & rv$comparators$include]
+}
+
+#' What the cascade rung that decided a cell actually did
+#'
+#' Both modals -- the comparison grid's and the heatmap's -- have to explain
+#' this, and they should say the same thing. A similarity score means nothing
+#' without the cutoff it was measured against, so pass the column's threshold
+#' whenever it is to hand.
+rung_explanation <- function(rung, score = NA_real_, threshold = NA_real_) {
+  fuzzy_text <- function() {
+    if (is.na(threshold)) return(sprintf("String similarity %.3f.", score))
+    sprintf("String similarity %.3f, %s this column's %.2f cutoff.", score,
+            if (!is.na(score) && score >= threshold) "at or above" else "below",
+            threshold)
+  }
+  switch(
+    rung,
+    exact = "The two values are byte-identical.",
+    normalized = "They agree once trimmed and case-folded.",
+    numeric = "Compared as numbers, within the configured tolerance.",
+    date = "Parsed as dates, then compared.",
+    set = "Compared as sets of values.",
+    fuzzy = fuzzy_text(),
+    judge = "The LLM judge decided this one.",
+    override = "You decided this one.",
+    blank = "One or both sides are blank.",
+    unpaired = "This record has no counterpart, so there is nothing to compare.",
+    rung
+  )
+}
+
+#' A column's fuzzy cutoff, when there is a comparator configuration to ask
+#'
+#' @return A number, or `NA` when the column or the configuration is unknown.
+field_threshold <- function(config, field) {
+  if (is.null(config) || !NROW(config) || !"threshold" %in% names(config)) {
+    return(NA_real_)
+  }
+  hit <- config$threshold[config$field == field]
+  if (!length(hit)) NA_real_ else as.numeric(hit[[1L]])
+}
+
+#' How a cell state reads in words, and what it costs the accounting
+#'
+#' The colour says it, but a modal should not make anyone decode a colour.
+state_verdict <- function(state) {
+  switch(
+    state,
+    agree = c("They agree", "true positive"),
+    disagree = c("They differ", "false positive and false negative"),
+    ai_missing = c("Only in the gold standard", "false negative"),
+    gold_only = c("Only in the gold standard", "false negative"),
+    gold_missing = c("Only in the AI", "false positive"),
+    ai_only = c("Only in the AI", "false positive"),
+    blank = c("Neither side has a value", "true negative, dropped from the metrics"),
+    c(state, "")
+  )
+}
+
+# A clicked axis label comes back as the plot drew it, which may be shortened
+# with a trailing ellipsis, so match on what is left of the front of it.
+field_from_label <- function(label, fields) {
+  label <- trimws(sub("\u2026$", "", as.character(label)[[1L]]))
+  if (!nzchar(label)) return(NULL)
+  hit <- fields[fields == label]
+  if (!length(hit)) hit <- fields[startsWith(fields, label)]
+  if (length(hit)) hit[[1L]] else NULL
+}
+
+# The interactive heatmap: hoverable tiles, clickable tiles, clickable column
+# names. Tiles come back through plotly's own click event, which only reaches
+# the server for a given source once that event is registered on the widget --
+# without event_register() plotly warns and event_data() stays empty.
+interactive_heatmap <- function(p, source, input_id) {
+  w <- tryCatch(plotly::ggplotly(p, tooltip = "text", source = source),
+                error = function(e) plotly::ggplotly(p))
+  w <- plotly::event_register(w, "plotly_click")
+  clickable_ticks(w, input_id)
+}
+
+# Column names are clickable in the interactive heatmap. Plotly emits click
+# events for data points but not for axis labels, so bind one delegated
+# handler to the widget: delegated, because plotly rebuilds its ticks on every
+# resize and a handler attached to the tick itself would not survive that.
+clickable_ticks <- function(widget, input_id) {
+  # Only the overview has anything to say about a column name; the per-paper
+  # heatmap passes NULL and keeps its ticks inert.
+  if (is.null(input_id)) return(widget)
+  htmlwidgets::onRender(widget, sprintf("
+    function(el) {
+      el.classList.add('eco-clickable-ticks');
+      el.addEventListener('click', function(e) {
+        var t = e.target;
+        if (!t || !t.parentNode || !t.parentNode.classList) return;
+        if (!t.parentNode.classList.contains('xtick')) return;
+        Shiny.setInputValue('%s', t.textContent, {priority: 'event'});
+      }, true);
+    }", input_id))
 }
 
 #' A percentage, or a dash when there is nothing to show

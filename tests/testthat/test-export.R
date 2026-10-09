@@ -24,8 +24,12 @@ test_that("the long table carries the colour the grid painted", {
   fx <- fixture_run()
   long <- aligned_table_long(fx$cells)
   expect_true("colour" %in% names(long))
-  expect_setequal(unique(long$colour[long$state == "ai_only"]), "purple")
-  expect_setequal(unique(long$colour[long$state == "gold_only"]), "orange")
+  # Colour follows the outcome, not the alignment detail: a value only the AI
+  # has is orange whether it came from an unpaired record or a blank gold cell.
+  expect_setequal(unique(long$colour[long$state == "ai_only"]), "orange")
+  expect_setequal(unique(long$colour[long$state == "gold_only"]), "yellow")
+  expect_setequal(unique(long$colour[long$state == "disagree"]), "purple")
+  expect_equal(long$colour, unname(state_colour(long$state)))
 })
 
 test_that("the workbook has a summary sheet and one sheet per field", {

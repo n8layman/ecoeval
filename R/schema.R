@@ -309,3 +309,34 @@ check_conformance <- function(records, schema, source = "ai") {
 unschematised_fields <- function(fields, schema) {
   setdiff(fields, schema$fields$field)
 }
+
+#' The column that quotes the paper
+#'
+#' Extraction schemas in this family carry a field holding the sentences the
+#' value was read out of -- `all_supporting_source_sentences` in the bundled
+#' example. It is the field that settles an argument: when the AI and the gold
+#' standard disagree, the quoted text usually says which of them read the paper
+#' correctly, so it is worth pulling out and showing beside any value rather
+#' than leaving it as one more column in the grid.
+#'
+#' Found by name, most specific first. Returns `NA` when there is nothing that
+#' looks like one -- the evidence is a bonus, never a requirement.
+#'
+#' @param fields Character vector of field names in use.
+#' @return A field name, or `NA_character_`.
+#' @examples
+#' evidence_field(c("species", "all_supporting_source_sentences"))
+#' evidence_field(c("species", "count"))
+#' @export
+evidence_field <- function(fields) {
+  fields <- as.character(fields)
+  sq <- squash_name(fields)
+  for (pat in c("supportingsourcesentence", "sourcesentence", "supportingsentence",
+                "supportingquote", "supportingtext", "^supporting", "sentence",
+                "^evidence", "evidence", "^quote", "quotation", "excerpt",
+                "^snippet", "sourcetext")) {
+    hit <- which(grepl(pat, sq))
+    if (length(hit)) return(fields[[hit[[1L]]]])
+  }
+  NA_character_
+}

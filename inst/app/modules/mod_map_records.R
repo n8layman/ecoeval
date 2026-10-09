@@ -45,8 +45,8 @@ mod_map_records_server <- function(id, rv) {
       req(rv$schema, rv$ai_raw, rv$gold_raw)
       reset_token()
       fields <- rv$schema$fields$field
-      ai_cols <- setdiff(names(rv$ai_raw), rv$ai_paper_col)
-      gold_cols <- setdiff(names(rv$gold_raw), rv$gold_paper_col)
+      ai_cols <- setdiff(names(rv$ai_raw), rv$ai_paper_key$columns)
+      gold_cols <- setdiff(names(rv$gold_raw), rv$gold_paper_key$columns)
       ai_map <- ecoeval::suggest_mapping(fields, ai_cols)
       gold_map <- ecoeval::suggest_mapping(fields, gold_cols)
       cfg <- ecoeval::default_comparator_config(rv$schema, fields = fields)
@@ -60,8 +60,8 @@ mod_map_records_server <- function(id, rv) {
 
     output$config_table <- renderUI({
       cfg <- suggestion()
-      ai_cols <- c("(ignore)" = "", setdiff(names(rv$ai_raw), rv$ai_paper_col))
-      gold_cols <- c("(ignore)" = "", setdiff(names(rv$gold_raw), rv$gold_paper_col))
+      ai_cols <- c("(ignore)" = "", setdiff(names(rv$ai_raw), rv$ai_paper_key$columns))
+      gold_cols <- c("(ignore)" = "", setdiff(names(rv$gold_raw), rv$gold_paper_key$columns))
 
       # n_enum lives on the schema, not the config; join it for the label.
       cfg$n_enum <- rv$schema$fields$n_enum[match(cfg$field, rv$schema$fields$field)]
@@ -178,10 +178,10 @@ mod_map_records_server <- function(id, rv) {
 
         incProgress(0.1, detail = "reading columns")
         rv$ai <- ecoeval::prepare_records(
-          rv$ai_raw, rv$ai_paper_col,
+          rv$ai_raw, rv$ai_paper_key,
           stats::setNames(use$ai_col, use$field), prefix = "a")
         rv$gold <- ecoeval::prepare_records(
-          rv$gold_raw, rv$gold_paper_col,
+          rv$gold_raw, rv$gold_paper_key,
           stats::setNames(use$gold_col, use$field), prefix = "g")
 
         # Normalisation is a pre-matching step, per value and cached: fastLink

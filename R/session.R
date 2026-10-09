@@ -36,13 +36,12 @@ new_run_config <- function() {
     created = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
     label = NULL,
     inputs = list(
-      ai = NULL, ai_table = NULL, ai_paper_col = NULL,
-      gold = NULL, gold_table = NULL, gold_paper_col = NULL,
+      ai = NULL, ai_table = NULL, ai_paper_key = NULL,
+      gold = NULL, gold_table = NULL, gold_paper_key = NULL,
       schema = NULL,
-      ai_papers = NULL, ai_papers_paper_col = NULL,
-      gold_papers = NULL, gold_papers_paper_col = NULL
+      ai_papers = NULL, ai_papers_paper_key = NULL,
+      gold_papers = NULL, gold_papers_paper_key = NULL
     ),
-    metadata_mapping = list(),
     record_mapping = list(),
     comparators = list(),
     linkage_fields = character(0),

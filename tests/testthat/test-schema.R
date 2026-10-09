@@ -69,3 +69,12 @@ test_that("unschematised_fields names gold columns the schema has no slot for", 
   expect_true("habitat_notes" %in%
                 unschematised_fields(names(gold_raw), fx$schema))
 })
+
+test_that("the evidence column is found by name, most specific first", {
+  expect_equal(evidence_field(c("species", "all_supporting_source_sentences")),
+               "all_supporting_source_sentences")
+  expect_equal(evidence_field(c("Supporting Quote", "notes")), "Supporting Quote")
+  expect_equal(evidence_field(c("a", "evidence_text")), "evidence_text")
+  # Nothing that looks like one is not an error -- the quotes are a bonus.
+  expect_true(is.na(evidence_field(c("species", "count"))))
+})

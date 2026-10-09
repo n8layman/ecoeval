@@ -5,6 +5,10 @@
 
 app_modules_loaded <- local({
   loaded <- FALSE
+  # Where the helpers and the tests themselves live. Under testthat that is not
+  # the global environment, and a module assigned only into the global one is
+  # invisible to a helper such as loaded_state().
+  host <- parent.env(environment())
   function() {
     if (loaded) return(TRUE)
     dir <- app_module_dir()
@@ -16,7 +20,9 @@ app_modules_loaded <- local({
       sys.source(f, envir = app_env)
     }
     for (nm in ls(app_env, all.names = TRUE)) {
-      assign(nm, get(nm, envir = app_env), envir = globalenv())
+      value <- get(nm, envir = app_env)
+      assign(nm, value, envir = globalenv())
+      if (!identical(host, globalenv())) assign(nm, value, envir = host)
     }
     loaded <<- TRUE
     TRUE

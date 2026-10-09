@@ -33,18 +33,64 @@ state_contributions <- function() {
   )
 }
 
+#' The four outcomes a reader acts on
+#'
+#' Seven cell states, four things a person actually does something about: the
+#' two sides agree, they conflict, only the gold standard has a value, or only
+#' the AI does.
+#'
+#' Two collapses do the work. Whether a one-sided value came from an unpaired
+#' record or from a blank in a paired one is a detail of the alignment, not of
+#' the finding -- both mean "one side has this and the other does not". And a
+#' column **neither** side filled in is agreement: they agree there is nothing
+#' there. That keeps the scheme to four colours, and it keeps them honest --
+#' green means "nothing to fix here", which is exactly what a mutually empty
+#' column is.
+#'
+#' Colour is not the accounting. A both-blank cell is still a true negative in
+#' [state_contributions()] and still drops out of accuracy, precision and
+#' recall, because a field neither party filled in says nothing about
+#' extraction quality. The states are what the metrics are computed over; the
+#' outcomes are what the grid and the heatmap are coloured by.
+#'
+#' @param state A character vector of cell states.
+#' @return A character vector of outcomes: `agree`, `disagree`, `only_gold`,
+#'   `only_ai`.
+#' @examples
+#' cell_outcome(c("agree", "blank", "ai_missing", "ai_only"))
+#' @export
+cell_outcome <- function(state) {
+  unname(c(agree = "agree", blank = "agree", disagree = "disagree",
+           ai_missing = "only_gold", gold_only = "only_gold",
+           gold_missing = "only_ai", ai_only = "only_ai")[state])
+}
+
+#' The outcomes in reading order, with the labels they are shown under
+#'
+#' @return A named character vector, outcome to label.
+#' @examples
+#' outcome_labels()
+#' @export
+outcome_labels <- function() {
+  c(agree = "Agree (TP, or TN where neither side has a value)",
+    disagree = "Both have a value, they differ (FP + FN)",
+    only_gold = "Only in the gold standard (FN)",
+    only_ai = "Only in the AI (FP)")
+}
+
 #' Grid colour for each cell state
 #'
-#' Fill carries agreement. Schema violations are marked, not coloured --
-#' validity is orthogonal to match state, and a cell can be both.
+#' Fill carries agreement, through [cell_outcome()], so the comparison grid and
+#' the overview heatmap say the same thing with the same four colours. Schema
+#' violations are marked, not coloured -- validity is orthogonal to match
+#' state, and a cell can be both.
 #'
 #' @param state A character vector of cell states.
 #' @return A character vector of colour names.
 #' @export
 state_colour <- function(state) {
-  c(agree = "green", disagree = "yellow", ai_missing = "yellow",
-    gold_missing = "yellow", ai_only = "purple", gold_only = "orange",
-    blank = "blank")[state]
+  c(agree = "green", disagree = "purple", only_gold = "yellow",
+    only_ai = "orange")[cell_outcome(state)]
 }
 
 #' Precision, recall and F1 from raw counts
@@ -345,6 +391,244 @@ progress_summary <- function(cells, papers, reviewed = character(0)) {
     n_reviewed = length(intersect(reviewed, papers)),
     n_pending_cells = if (nrow(cells)) sum(cells$pending) else 0L
   )
+}
+
+#' The confusion matrix, as the colours counted
+#'
+#' The four colours *are* the confusion matrix. Every cell is one of five
+#' things, each contributing a fixed amount to the accounting in
+#' [state_contributions()], and every number on the dashboard is those
+#' contributions added up:
+#'
+#' | Colour | Cells | Contributes |
+#' |---|---|---|
+#' | green  | both sides agree on a value | TP |
+#' | purple | both have a value and they differ | FP **and** FN |
+#' | yellow | only the gold standard has a value | FN -- a miss |
+#' | orange | only the AI has a value | FP |
+#' | green  | neither side has a value | TN -- drops out |
+#'
+#' A disagreement costs both, which is the standard multi-class treatment: a
+#' misclassification is a false positive for the value asserted and a false
+#' negative for the value missed. True negatives drop out of every metric
+#' because a field neither party filled in says nothing about extraction
+#' quality -- which is why green covers two rows of that table, and why only
+#' one of them moves a number.
+#'
+#' This counts **cells**. A heatmap tile shows the worst outcome among its
+#' rows, so the picture aggregates where this does not: the chart says where to
+#' look, this says how much there is.
+#'
+#' @param cells A cell tibble from [score_cells()].
+#' @param field One column to restrict the count to, or `NULL` for all of them.
+#'   The same five boxes either way -- a column's confusion matrix is the whole
+#'   run's, computed over fewer cells.
+#' @return A list with `field`, `by_outcome` (a tibble of `outcome`, `label`,
+#'   `contributes`, `colour`, `n`, `tp`, `fp`, `fn`, `tn`, in reading order),
+#'   the totals `tp`, `fp`, `fn`, `tn`, `n_scored`, and the metrics derived from
+#'   them: `accuracy`, `precision`, `recall` (sensitivity), `f1`.
+#' @examples
+#' confusion_totals(empty_cells())$by_outcome$label
+#' @export
+confusion_totals <- function(cells, field = NULL) {
+  if (!is.null(field)) {
+    cells <- cells[cells$field %in% field, , drop = FALSE]
+  }
+  # Blanks are green like the agreements, but they are the true-negative box of
+  # the matrix rather than the true-positive one, so the tally keeps them apart.
+  categories <- c("agree", "disagree", "only_gold", "only_ai", "blank")
+  labels <- c(agree = "Both sides agree on a value",
+              disagree = "Both have a value, they differ",
+              only_gold = "Only the gold standard has a value",
+              only_ai = "Only the AI has a value",
+              blank = "Neither side has a value")
+  contributes <- c(agree = "true positive",
+                   disagree = "false positive and false negative",
+                   only_gold = "false negative \u2014 a miss",
+                   only_ai = "false positive",
+                   blank = "true negative \u2014 drops out of every metric")
+  colours <- unname(state_colour(c("agree", "disagree", "gold_only",
+                                   "ai_only", "blank")))
+
+  contrib <- state_contributions()
+  d <- dplyr::left_join(tibble::tibble(state = as.character(cells$state)),
+                        contrib, by = "state")
+  d$category <- ifelse(d$state == "blank", "blank", cell_outcome(d$state))
+
+  count <- function(cat, col) {
+    if (!nrow(d)) return(0L)
+    as.integer(sum(d[[col]][d$category == cat], na.rm = TRUE))
+  }
+  by_outcome <- tibble::tibble(
+    outcome = categories,
+    label = unname(labels[categories]),
+    contributes = unname(contributes[categories]),
+    colour = colours,
+    n = vapply(categories, function(k) as.integer(sum(d$category == k)), integer(1),
+               USE.NAMES = FALSE),
+    tp = vapply(categories, count, integer(1), col = "tp", USE.NAMES = FALSE),
+    fp = vapply(categories, count, integer(1), col = "fp", USE.NAMES = FALSE),
+    fn = vapply(categories, count, integer(1), col = "fn", USE.NAMES = FALSE),
+    tn = vapply(categories, count, integer(1), col = "tn", USE.NAMES = FALSE)
+  )
+  tp <- sum(by_outcome$tp); fp <- sum(by_outcome$fp)
+  fn <- sum(by_outcome$fn); tn <- sum(by_outcome$tn)
+  n_scored <- sum(by_outcome$n) - by_outcome$n[by_outcome$outcome == "blank"]
+  m <- prf(tp, fp, fn)
+  list(field = field, by_outcome = by_outcome, tp = tp, fp = fp, fn = fn,
+       tn = tn, n_scored = n_scored,
+       accuracy = if (n_scored > 0) tp / n_scored else NA_real_,
+       precision = m$precision, recall = m$recall, f1 = m$f1)
+}
+
+#' Every paper against every column, as a rate per tile
+#'
+#' The data behind the overview heatmap: one row per paper per column, holding
+#' the share of that paper's cells that agree, and the counts behind it.
+#'
+#' A tile covers every row of that paper's comparison for that column -- a
+#' matched AI-and-gold pair is one row, an unmatched record from either side is
+#' one row -- so it usually summarises several cells. That is exactly why the
+#' overview cannot use the four outcome colours: they describe **one cell**, and
+#' a tile holding nine agreements and one disagreement would paint the same as
+#' one holding ten disagreements. `agreement` is what aggregates honestly, and
+#' `outcome` is kept only for the tiles where every cell says the same thing.
+#'
+#' `agreement` is `n_agree / n_scored`, the same definition as
+#' [field_metrics()]'s accuracy, so the map and the numbers under it cannot
+#' disagree. It is `NA` where nothing was scored -- a paper neither side
+#' produced a record for, or a column both left empty. Blanks stay out of the
+#' denominator, as they do everywhere else.
+#'
+#' @param cells A cell tibble from [score_cells()].
+#' @param papers Papers to include, typically `scope$papers`. Defaults to the
+#'   papers appearing in `cells`. A paper with nothing scored still gets a row,
+#'   so the overview covers all of scope.
+#' @param fields Columns to include. Defaults to the columns in `cells`.
+#'
+#' @return A tibble with `paper`, `field`, `agreement`, `outcome`, `n_cells`,
+#'   `n_scored`, and `n_agree`, `n_blank`, `n_disagree`, `n_only_gold`,
+#'   `n_only_ai`.
+#' @export
+paper_field_outcomes <- function(cells, papers = NULL, fields = NULL) {
+  papers <- papers %||% sort(unique(cells$paper))
+  fields <- fields %||% unique(cells$field)
+  proto <- empty_tbl(paper = character(), field = character(),
+                     agreement = numeric(), outcome = character(),
+                     n_cells = integer(), n_scored = integer(),
+                     n_agree = integer(), n_blank = integer(),
+                     n_disagree = integer(), n_only_gold = integer(),
+                     n_only_ai = integer())
+  if (!length(papers) || !length(fields)) return(proto)
+
+  grid <- tibble::tibble(
+    paper = rep(papers, each = length(fields)),
+    field = rep(fields, times = length(papers))
+  )
+  scored <- cells[cells$paper %in% papers & cells$field %in% fields, , drop = FALSE]
+  if (nrow(scored)) {
+    scored$outcome <- cell_outcome(scored$state)
+    counts <- dplyr::summarise(
+      dplyr::group_by(scored, .data$paper, .data$field),
+      n_cells = dplyr::n(),
+      # Counted off the states, so "agreed on a value" and "agreed there is
+      # nothing there" stay distinguishable even though they colour the same.
+      n_agree = sum(.data$state == "agree"),
+      n_blank = sum(.data$state == "blank"),
+      n_disagree = sum(.data$outcome == "disagree"),
+      n_only_gold = sum(.data$outcome == "only_gold"),
+      n_only_ai = sum(.data$outcome == "only_ai"),
+      .groups = "drop"
+    )
+    grid <- dplyr::left_join(grid, counts, by = c("paper", "field"))
+  }
+  for (nm in c("n_cells", "n_agree", "n_blank", "n_disagree", "n_only_gold",
+               "n_only_ai")) {
+    grid[[nm]] <- as.integer(dplyr::coalesce(grid[[nm]], 0L))
+  }
+  grid$n_scored <- grid$n_cells - grid$n_blank
+  grid$agreement <- ifelse(grid$n_scored > 0L, grid$n_agree / grid$n_scored,
+                           NA_real_)
+  # Only for a tile whose cells all say the same thing; anywhere else the four
+  # outcomes describe nothing, which is what `agreement` is for.
+  grid$outcome <- dplyr::case_when(
+    grid$n_scored == 0L ~ "agree",
+    grid$n_agree == grid$n_scored ~ "agree",
+    grid$n_disagree == grid$n_scored ~ "disagree",
+    grid$n_only_gold == grid$n_scored ~ "only_gold",
+    grid$n_only_ai == grid$n_scored ~ "only_ai",
+    TRUE ~ "mixed"
+  )
+  grid[, names(proto)]
+}
+
+#' Every record in one paper against every column, one cell per tile
+#'
+#' The data behind the per-paper heatmap, and the place the four outcome
+#' colours are exact: one row per row of that paper's comparison, one column per
+#' scored field, and every tile is a single cell with a single outcome. Nothing
+#' is aggregated, so nothing is lost.
+#'
+#' A row is a matched AI-and-gold pair, or an unmatched record from either side.
+#' They keep the order the comparison produced -- pairs, then AI-only, then
+#' gold-only -- because that is the order a reader walks them in. `label` names
+#' the row from the identity columns, taking the gold standard's values as the
+#' reference and falling back to the AI's for a row the gold standard does not
+#' have.
+#'
+#' @param cells A cell tibble from [score_cells()].
+#' @param paper The paper to describe.
+#' @param fields Columns to include, in the order to show them. Defaults to the
+#'   columns in `cells`.
+#' @param identity The identity columns, used to label the rows. They are shown
+#'   first, the way a spreadsheet freezes its ID columns.
+#'
+#' @return A tibble with `pair_id`, `label`, `kind`, `field`, `outcome`,
+#'   `state`, `ai_value`, `gold_value`.
+#' @export
+record_field_outcomes <- function(cells, paper, fields = NULL,
+                                  identity = character(0)) {
+  proto <- empty_tbl(pair_id = character(), label = character(),
+                     kind = character(), field = character(),
+                     outcome = character(), state = character(),
+                     ai_value = character(), gold_value = character())
+  d <- cells[cells$paper %in% paper, , drop = FALSE]
+  if (!nrow(d)) return(proto)
+
+  fields <- fields %||% unique(d$field)
+  fields <- c(intersect(identity, fields), setdiff(fields, identity))
+  d <- d[d$field %in% fields, , drop = FALSE]
+  if (!nrow(d)) return(proto)
+
+  d$outcome <- cell_outcome(d$state)
+  d$field <- factor(d$field, levels = fields)
+
+  ids <- unique(d$pair_id)
+  labels <- vapply(ids, function(pid) {
+    rows <- d[d$pair_id == pid & d$field %in% identity, , drop = FALSE]
+    # The gold standard is the reference, so it names the row where it has one.
+    v <- rows$gold_value
+    if (!length(v) || all(is_blank(v))) v <- rows$ai_value
+    v <- v[!is_blank(v)]
+    if (!length(v)) pid else paste(v, collapse = " · ")
+  }, character(1), USE.NAMES = FALSE)
+  kinds <- vapply(ids, function(pid) {
+    row <- d[d$pair_id == pid, , drop = FALSE][1L, ]
+    if (is.na(row$ai_rid)) "gold only" else
+      if (is.na(row$gold_rid)) "AI only" else "matched"
+  }, character(1), USE.NAMES = FALSE)
+
+  d$label <- labels[match(d$pair_id, ids)]
+  d$kind <- kinds[match(d$pair_id, ids)]
+  # A duplicate label would collapse two records into one row of the chart.
+  dup <- duplicated(labels) | duplicated(labels, fromLast = TRUE)
+  if (any(dup)) {
+    suffix <- stats::setNames(sprintf("%s (%s)", labels, ids), ids)
+    d$label <- ifelse(d$pair_id %in% ids[dup], suffix[d$pair_id], d$label)
+  }
+  out <- d[, c("pair_id", "label", "kind", "field", "outcome", "state",
+               "ai_value", "gold_value")]
+  dplyr::arrange(out, match(.data$pair_id, ids), .data$field)
 }
 
 #' Pairings that look wrong

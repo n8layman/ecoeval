@@ -10,7 +10,7 @@ evaluate_extraction(
   schema,
   ai_papers = NULL,
   gold_papers = NULL,
-  paper_col = NULL,
+  paper_key = NULL,
   linkage_fields = NULL,
   judge = NULL
 )
@@ -23,7 +23,8 @@ canonical form.}
 
 \item{ai_papers, gold_papers}{Optional paper list paths or tibbles.}
 
-\item{paper_col}{Column holding the paper identifier. Guessed when \code{NULL}.}
+\item{paper_key}{The columns identifying the paper -- see \code{\link[=paper_key]{paper_key()}}.
+Detected per table when \code{NULL}.}
 
 \item{linkage_fields}{Linkage fields. Defaults to the schema suggestion.}
 

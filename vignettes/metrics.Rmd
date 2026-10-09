@@ -32,15 +32,27 @@ state_contributions()
 
 Reading those states:
 
-| State                     | Grid colour | Meaning                                       |
-| ------------------------- | ----------- | --------------------------------------------- |
-| `agree`                   | green       | matched pair, values agree under the comparator |
-| `disagree`                | yellow      | matched pair, values disagree                 |
-| `ai_missing`              | yellow      | matched pair, the AI left it blank            |
-| `gold_missing`            | yellow      | matched pair, the human left it blank         |
-| `ai_only`                 | purple      | AI record with no counterpart                 |
-| `gold_only`               | orange      | gold record with no counterpart               |
-| `blank`                   | —           | both sides blank                              |
+| State                     | Outcome            | Colour | Meaning                                       |
+| ------------------------- | ------------------ | ------ | --------------------------------------------- |
+| `agree`                   | agree              | green  | matched pair, values agree under the comparator |
+| `disagree`                | disagree           | purple | matched pair, values differ                   |
+| `ai_missing`              | only in the gold   | yellow | matched pair, the AI left it blank            |
+| `gold_only`               | only in the gold   | yellow | gold record with no counterpart               |
+| `gold_missing`            | only in the AI     | orange | matched pair, the human left it blank         |
+| `ai_only`                 | only in the AI     | orange | AI record with no counterpart                 |
+| `blank`                   | agree              | green  | neither side has a value                      |
+
+Seven states, four colours. Whether a one-sided value came from an unpaired
+record or from a blank on one side of a paired one is a detail of the
+*alignment*, not of the finding, so `cell_outcome()` collapses them; and a
+column neither side filled in is agreement about absence. The per-paper
+heatmap and the exported table paint the result the same way. The overview on
+the dashboard cannot: its tiles cover several records at once, so it shades the
+share that agree rather than claiming one of these four.
+
+The colours are not the accounting: a `blank` cell is a **true negative** and
+drops out of accuracy, precision and recall entirely, as the table above shows.
+It reads as agreement and counts as nothing.
 
 A disagreement counts as **both** a false positive and a false negative. That's
 the standard multi-class treatment: a misclassification is a false positive for
@@ -50,11 +62,30 @@ Cells blank on both sides are true negatives and drop out of precision and
 recall, because a field neither party filled in says nothing about extraction
 quality.
 
+## The colours are the accounting
+
+Every cell is one of five things, and the dashboard's four colours are exactly
+those boxes, so counting the colours *is* computing the confusion matrix.
+
+```{r}
+ct <- confusion_totals(run$cells)
+ct$by_outcome[, c("outcome", "colour", "n", "tp", "fp", "fn", "tn")]
+```
+
+Which ties out with the per-field accounting by construction — both are
+`state_contributions()` summed, so there is no second calculation to drift:
+
+```{r}
+fm <- field_metrics(run$cells)
+c(tp = ct$tp - sum(fm$tp), fp = ct$fp - sum(fm$fp), fn = ct$fn - sum(fm$fn))
+c(accuracy = ct$accuracy, precision = ct$precision, recall = ct$recall, f1 = ct$f1)
+```
+
 ## The property the accounting rests on
 
 A wrongly linked pair that disagrees on everything produces FP + FN per
-column — **exactly the same as leaving those rows unlinked**, where purple gives
-FP and orange gives FN.
+column — **exactly the same as leaving those rows unlinked**, where the AI-only
+row gives FP and the gold-only row gives FN.
 
 ```{r}
 ai   <- tibble::tibble(.rid = "a1", .paper = "P", v = "alpha", w = "one")
@@ -192,7 +223,7 @@ No ceiling arithmetic, no reclassification, no confirmation flow. The counts do
 the work: `commensalism` appearing three times is a category the schema is
 missing; `predatoin` appearing once is a typo. The two have opposite fixes.
 
-Schema violations are **marked, not coloured**, in the grid. Validity is
+Schema violations are **marked, not coloured**. Validity is
 orthogonal to match state, a cell can be both, and either side's value (or both)
 may be the offender. Fill carries agreement; the marker carries validity.
 

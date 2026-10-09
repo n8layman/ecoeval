@@ -9,11 +9,84 @@
 # Two confusion matrices, both about extraction. There is no third matrix about
 # linkage quality: users should not have to learn that distinction.
 
+# Past this many papers the overview heatmap is a wall of pixels rather than a
+# chart, so it shows the worst ones and says how many it left out.
+HEATMAP_MAX_PAPERS <- 60L
+
+# Names the plotly click events come back under.
+HEATMAP_SOURCE <- "eco_heatmap"
+
+# ggplotly gives every tile its own trace to make it hoverable, which stops
+# being worth it on a big grid: past this many tiles the heatmap renders as a
+# static plot instead of a slow interactive one.
+HEATMAP_MAX_TILES <- 900L
+
+# The confusion matrix as its four boxes, coloured like the tiles they count.
+# The populated-by-both box splits into agree and differ, which is the split
+# that separates "did not fill the field in" from "filled it in wrong".
+confusion_matrix_ui <- function(n) {
+  box <- function(colour, label, count, contributes) {
+    div(class = paste0("eco-cm-box eco-", colour),
+        div(class = "eco-cm-n", format(count, big.mark = ",")),
+        div(class = "eco-cm-label", label),
+        div(class = "eco-cm-role", contributes))
+  }
+  head_cell <- function(...) tags$th(class = "eco-cm-head", ...)
+  tags$table(
+    class = "eco-cm",
+    tags$thead(tags$tr(
+      tags$th(""),
+      head_cell("Gold standard has a value"),
+      head_cell("Gold standard is blank")
+    )),
+    tags$tbody(
+      tags$tr(
+        head_cell("AI has a value"),
+        tags$td(
+          box("green", "They agree", n[["agree"]], "true positive"),
+          box("purple", "They differ", n[["disagree"]],
+              "false positive + false negative")
+        ),
+        tags$td(box("orange", "Only in the AI", n[["only_ai"]],
+                    "false positive"))
+      ),
+      tags$tr(
+        head_cell("AI is blank"),
+        tags$td(box("yellow", "Only in the gold standard", n[["only_gold"]],
+                    "false negative")),
+        tags$td(box("green", "Neither side", n[["blank"]],
+                    "true negative -- drops out"))
+      )
+    )
+  )
+}
+
 mod_dashboard_ui <- function(id) {
   ns <- NS(id)
   tagList(
     uiOutput(ns("headline")),
     uiOutput(ns("resolve_panel")),
+    eco_panel(
+      "Every paper, every column",
+      paste("The whole run in one picture. Rows are papers, columns are the",
+            "gold standard's columns, and a tile is that paper's records for",
+            "that column, shaded by how much of it agrees -- dark where the",
+            "two sides match on everything, pale where they match on little.",
+            "It shades a rate rather than one of the four outcome colours",
+            "because a tile covers several records, and those colours describe",
+            "a single cell; they are exact one paper at a time, which is what",
+            "clicking a tile opens. Both axes are sorted worst first: a pale",
+            "vertical band is a column that fails everywhere, usually a",
+            "comparator or schema problem; a pale horizontal one is a paper",
+            "that fails everywhere, usually a bad alignment. Hover a tile for",
+            "what is behind it, counted in rows of that paper's comparison --",
+            "a matched pair is one row, an unmatched record is one row. Click",
+            "a column name to narrow everything below to that column."),
+      uiOutput(ns("heatmap_ui")),
+      uiOutput(ns("confusion_matrix")),
+      div(style = "margin-top:8px;",
+          downloadButton(ns("dl_heatmap"), "Download PNG", class = "btn-sm"))
+    ),
     eco_panel(
       "Column accuracy, worst first",
       paste("The triage view -- but read it carefully. A column that is",
@@ -177,6 +250,134 @@ mod_dashboard_server <- function(id, rv) {
     })
 
     # ---- charts -------------------------------------------------------------
+
+    # The overview heatmap. Every scoped paper gets a row, including one that
+    # produced nothing, since an empty row is itself a finding.
+    heat <- reactive({
+      req(rv$cells)
+      ecoeval::paper_field_outcomes(rv$cells, rv$scope$papers, scored_fields(rv))
+    })
+    heat_papers <- reactive(min(length(unique(heat()$paper)), HEATMAP_MAX_PAPERS))
+    heat_plot <- function() {
+      ecoeval::plot_paper_heatmap(heat(), max_papers = HEATMAP_MAX_PAPERS)
+    }
+
+    output$heatmap_ui <- renderUI({
+      h <- sprintf("%dpx", 26 * heat_papers() + 230)
+      n_tiles <- heat_papers() * length(unique(heat()$field))
+      if (n_tiles <= HEATMAP_MAX_TILES) {
+        plotly::plotlyOutput(ns("heatmap"), height = h)
+      } else {
+        tagList(
+          plotOutput(ns("heatmap_static"), height = h, click = ns("heatmap_click")),
+          div(class = "eco-note", style = "margin-top:6px;",
+              sprintf(paste("%d tiles is too many to make every one hoverable,",
+                            "so this one is static. The counts behind a tile",
+                            "are in the exported table."), n_tiles))
+        )
+      }
+    })
+    output$heatmap <- plotly::renderPlotly({
+      interactive_heatmap(heat_plot(), HEATMAP_SOURCE, ns("column_click"))
+    })
+    output$heatmap_static <- renderPlot(heat_plot())
+
+    # ---- the same colours, counted ------------------------------------------
+    # Which column the matrix is scoped to; NULL means all of them.
+    matrix_field <- reactiveVal(NULL)
+
+    # Reset when the run changes underneath it, so a stale column cannot linger.
+    observeEvent(rv$cells, {
+      f <- matrix_field()
+      if (!is.null(f) && !f %in% rv$cells$field) matrix_field(NULL)
+    })
+
+    # The heatmap and the headline numbers are one thing seen two ways, so the
+    # arithmetic is written out rather than asserted: these are the tiles'
+    # colours added up, and the metrics fall straight out of them.
+    output$confusion_matrix <- renderUI({
+      req(rv$cells)
+      field <- matrix_field()
+      ct <- ecoeval::confusion_totals(rv$cells, field)
+      n <- stats::setNames(ct$by_outcome$n, ct$by_outcome$outcome)
+
+      ratio <- function(label, num, den, value) {
+        span(style = "margin-right:18px;",
+             tags$strong(label), " ",
+             sprintf("%d / %d = %s", num, den, fmt_pct(value)))
+      }
+
+      div(
+        style = "margin-top:16px;",
+        div(style = "display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;",
+            tags$h4(style = "font-size:13.5px; margin:0;",
+                    if (is.null(field)) "Confusion matrix \u2014 every column"
+                    else paste("Confusion matrix \u2014", field)),
+            if (!is.null(field))
+              actionLink(ns("matrix_all"), "show every column",
+                         class = "eco-status")),
+        confusion_matrix_ui(n),
+        div(class = "eco-status", style = "margin-top:10px;",
+            ratio("Precision", ct$tp, ct$tp + ct$fp, ct$precision),
+            ratio("Recall (sensitivity)", ct$tp, ct$tp + ct$fn, ct$recall),
+            span(style = "margin-right:18px;",
+                 tags$strong("F1"), " ", fmt_pct(ct$f1)),
+            ratio("Accuracy", ct$tp, ct$n_scored, ct$accuracy)),
+        div(class = "eco-note", style = "margin-top:6px;",
+            paste("The same colours as the tiles, counted. A disagreement costs",
+                  "a false positive and a false negative, since it asserts a",
+                  "wrong value and misses the right one; a cell neither side",
+                  "filled in is a true negative and drops out of every metric.",
+                  "A tile shows the worst outcome among its rows, so the map",
+                  "above aggregates where these counts do not -- the chart says",
+                  "where to look, the matrix says how much there is."))
+      )
+    })
+
+    observeEvent(input$matrix_all, matrix_field(NULL))
+
+    # ---- clicking a column name ---------------------------------------------
+    # The interactive plot sends the tick label it drew, which is abbreviated;
+    # the static one sends coordinates, and a click below the first row is a
+    # click on the axis rather than on a tile.
+    select_column <- function(field) {
+      if (is.null(field) || !field %in% rv$cells$field) return()
+      matrix_field(field)
+      # The per-column detail panel follows, so one click moves both views.
+      updateSelectInput(session, "column", selected = field)
+    }
+
+    observeEvent(input$column_click, {
+      select_column(field_from_label(input$column_click, unique(heat()$field)))
+    })
+
+    # ---- clicking a tile ----------------------------------------------------
+    # A tile here covers several records, so there is nothing exact to show in
+    # a modal. It opens the paper instead: the overview says where to look, the
+    # comparison view is where you look, and there the tiles are single cells.
+    open_paper <- function(paper, field = NULL) {
+      if (is.null(paper) || !paper %in% rv$scope$papers) return()
+      rv$current_paper <- paper
+      rv$focus_field <- field
+      rv$stage <- "compare"
+    }
+
+    observeEvent(plotly::event_data("plotly_click", source = HEATMAP_SOURCE), {
+      ev <- plotly::event_data("plotly_click", source = HEATMAP_SOURCE)
+      tile <- ecoeval::parse_tile_key(ev$key)
+      if (!is.null(tile)) open_paper(tile$row, tile$field)
+    })
+
+    observeEvent(input$heatmap_click, {
+      d <- heat_plot()$data
+      x <- round(input$heatmap_click$x); y <- round(input$heatmap_click$y)
+      fields <- levels(d$field); papers <- levels(d$paper)
+      if (is.na(x) || is.na(y) || x < 1L || x > length(fields)) return()
+      if (y < 1L) return(select_column(fields[[x]]))   # the axis, not a tile
+      if (y > length(papers)) return()
+      open_paper(papers[[y]], fields[[x]])
+    })
+
     output$column_accuracy <- renderPlot(
       ecoeval::plot_column_accuracy(fm()),
       height = function() max(240, 34 * nrow(fm()) + 90)
@@ -224,6 +425,9 @@ mod_dashboard_server <- function(id, rv) {
         }
       )
     }
+    output$dl_heatmap <- png_download(
+      heat_plot, "paper_column_overview",
+      height = max(3.5, 0.28 * heat_papers() + 2.5))
     output$dl_column_accuracy <- png_download(
       function() ecoeval::plot_column_accuracy(fm()), "column_accuracy",
       height = max(3, 0.4 * nrow(fm()) + 1.5))
@@ -236,7 +440,7 @@ mod_dashboard_server <- function(id, rv) {
       req(rv$cells, rv$pairs)
       ecoeval::collect_findings(
         rv$cells, rv$pairs, rv$conformance, rv$schema,
-        gold_fields = setdiff(names(rv$gold_raw), rv$gold_paper_col),
+        gold_fields = setdiff(names(rv$gold_raw), rv$gold_paper_key$columns),
         collapses = rv$collapses,
         dropped_fields = dropped_fields(rv),
         linkage_fields = identity_fields(rv)

@@ -47,19 +47,32 @@ test_that("a missing record set fails loudly instead of half-loading", {
   })
 })
 
-test_that("mapping the metadata puts both sources into canonical form", {
+test_that("the paper identifier is detected without being asked for", {
   skip_without_app()
   rv <- loaded_state()
   shiny::testServer(mod_map_metadata_server,
                     args = list(id = "metadata", rv = rv), {
-    session$setInputs(ai_paper_col = "doi", gold_paper_col = "doi",
-                      ai_papers_col = "doi", gold_papers_col = "doi",
-                      ai_meta = c("title", "year"),
-                      gold_meta = c("title", "year"))
+    # No inputs set: the stage detects the identifier for all four tables.
     session$setInputs(apply = 1)
+    expect_equal(rv$ai_paper_key$strategy, "doi")
     expect_true(all(c(".rid", ".paper") %in% names(rv$ai)))
+    expect_false(anyNA(rv$ai$.paper))
     expect_equal(nrow(rv$ai_papers), 11L)
+    # Alignment metadata comes from the same detection, not from a form.
+    expect_setequal(rv$metadata_fields, c("title", "year"))
     expect_equal(rv$stage, "papers")
+  })
+})
+
+test_that("the detected identifier can be overridden by hand", {
+  skip_without_app()
+  rv <- loaded_state()
+  shiny::testServer(mod_map_metadata_server,
+                    args = list(id = "metadata", rv = rv), {
+    session$setInputs(ai_papers_cols = c("title", "year"))
+    session$setInputs(apply = 1)
+    expect_equal(rv$ai_papers_key$columns, c("title", "year"))
+    expect_equal(rv$ai_paper_key$columns, "doi")
   })
 })
 
@@ -125,6 +138,15 @@ test_that("the dashboard renders its numbers, charts and findings", {
     expect_true(!is.null(output$column_accuracy$src))
     expect_true(!is.null(output$confusion$src))
     expect_true(nchar(output$confusion_interactive) > 0L)
+    # The overview heatmap: every scoped paper, hoverable at this size.
+    expect_true(grepl("plotly", as.character(output$heatmap_ui$html)))
+    expect_true(nchar(output$heatmap) > 0L)
+    # The matrix under it is the same colours counted, and it shows the sums.
+    tally <- as.character(output$confusion_matrix$html)
+    ct <- ecoeval::confusion_totals(rv$cells)
+    expect_true(grepl("Precision", tally))
+    expect_true(grepl(sprintf("%d / %d", ct$tp, ct$tp + ct$fp), tally, fixed = TRUE))
+    expect_equal(ct$accuracy, ecoeval::aggregate_metrics(rv$cells)$overall_accuracy)
     expect_true(nchar(output$export_status) > 0L)
     expect_true(grepl("Findings", as.character(output$findings$html)))
     # The grouped findings reach the screen, not just the tibble.
@@ -132,28 +154,31 @@ test_that("the dashboard renders its numbers, charts and findings", {
   })
 })
 
-test_that("the comparison grid renders one paper at a time", {
+test_that("the comparison heatmap renders one paper at a time, one cell a tile", {
   skip_without_app()
   rv <- scored_state()
   shiny::testServer(mod_compare_server, args = list(id = "compare", rv = rv), {
-    session$setInputs(expand = TRUE)
-    g <- grid_data()
-    expect_equal(nrow(g$table), sum(rv$pairs$paper == rv$current_paper))
-    # Identity columns are pinned left, right after the row and kind columns.
-    expect_equal(names(g$table)[3:4], identity_fields(rv))
-    expect_true(any(grepl("eco-cell eco-", unlist(g$table))))
+    d <- heat()
+    n_rows <- sum(rv$pairs$paper == rv$current_paper)
+    # Nothing is aggregated here: one tile per record per scored column.
+    expect_equal(nrow(d), n_rows * length(scored_fields(rv)))
+    expect_equal(length(unique(d$label)), n_rows)
+    # Identity columns come first, the way the grid used to pin them left.
+    expect_equal(levels(d$field)[seq_along(identity_fields(rv))],
+                 identity_fields(rv))
+    expect_true(grepl("plotly", as.character(output$heatmap_ui$html)))
   })
 })
 
-test_that("rejecting a link splits the row and rescores immediately", {
+test_that("rejecting a link from the cell modal splits the row and rescores", {
   skip_without_app()
   rv <- scored_state()
   shiny::isolate(rv$current_paper <- rv$pairs$paper[rv$pairs$kind == "pair"][[1L]])
   shiny::testServer(mod_compare_server, args = list(id = "compare", rv = rv), {
-    session$setInputs(expand = TRUE)
     before <- sum(rv$pairs$kind == "pair")
-    # Cell selection is zero-based, and column 2 is the first identity column.
-    session$setInputs(grid_cells_selected = matrix(c(0L, 2L), nrow = 1))
+    pid <- rv$pairs$pair_id[rv$pairs$paper == rv$current_paper &
+                              rv$pairs$kind == "pair"][[1L]]
+    select_cell(pid, identity_fields(rv)[[1L]])
     session$setInputs(reject = 1)
     expect_equal(sum(rv$pairs$kind == "pair"), before - 1L)
     expect_equal(nrow(rv$rejected), 1L)
@@ -166,18 +191,31 @@ test_that("a cell override has the last word and is recorded", {
   disagreement <- shiny::isolate(rv$cells[rv$cells$state == "disagree", ][1, ])
   shiny::isolate(rv$current_paper <- disagreement$paper)
   shiny::testServer(mod_compare_server, args = list(id = "compare", rv = rv), {
-    session$setInputs(expand = TRUE)
-    g <- grid_data()
-    i <- match(disagreement$pair_id, g$pair_ids)
-    j <- match(disagreement$field, g$fields)
-    skip_if(is.na(i) || is.na(j), "the chosen cell is not on this page")
-    session$setInputs(grid_cells_selected = matrix(c(i - 1L, j - 1L), nrow = 1))
+    select_cell(disagreement$pair_id, disagreement$field)
     session$setInputs(say_same = 1)
     row <- rv$cells[rv$cells$pair_id == disagreement$pair_id &
                       rv$cells$field == disagreement$field, ]
     expect_equal(row$state, "agree")
     expect_true(row$overridden)
     expect_equal(nrow(rv$overrides), 1L)
+  })
+})
+
+test_that("clicking a tile is what opens the cell, twice over if need be", {
+  skip_without_app()
+  rv <- scored_state()
+  shiny::isolate(rv$current_paper <- rv$pairs$paper[rv$pairs$kind == "pair"][[1L]])
+  shiny::testServer(mod_compare_server, args = list(id = "compare", rv = rv), {
+    d <- heat()
+    key <- paste(d$pair_id[[1L]], as.character(d$field)[[1L]], sep = "")
+    tile <- ecoeval::parse_tile_key(key)
+    select_cell(tile$row, tile$field)
+    expect_equal(selected_cell()$pair_id, d$pair_id[[1L]])
+    first <- selected_cell()$nonce
+    # The same tile again has to reopen the modal, which a plain reactiveVal
+    # would not do -- hence the nonce.
+    select_cell(tile$row, tile$field)
+    expect_true(selected_cell()$nonce > first)
   })
 })
 
@@ -215,4 +253,155 @@ test_that("an unreadable previous run says so instead of erroring", {
                                             stringsAsFactors = FALSE))
     expect_match(as.character(output$diff$html), "Could not read")
   })
+})
+
+test_that("clicking a cell shows both values and both sets of quotes", {
+  skip_without_app()
+  rv <- scored_state()
+  cells <- shiny::isolate(rv$cells)
+  ev <- ecoeval::evidence_field(unique(cells$field))
+  expect_equal(ev, "all_supporting_source_sentences")
+
+  # A cell where the two sides disagree, so there is something to settle.
+  d <- cells[cells$field == "location_country" & cells$state == "disagree", ][1, ]
+  html <- as.character(cell_modal_body(cells, d$pair_id, "location_country",
+                                       evidence = ev))
+
+  expect_true(grepl("Gold standard", html))
+  expect_true(grepl("Supporting sentences", html))
+  # The quoted text itself, from both sides, not just the labels.
+  quote <- cells[cells$pair_id == d$pair_id & cells$field == ev, ]
+  expect_true(grepl(substr(quote$ai_value[[1L]], 1, 25), html, fixed = TRUE))
+  expect_true(grepl(substr(quote$gold_value[[1L]], 1, 25), html, fixed = TRUE))
+  # The column being clicked is not repeated as its own evidence block.
+  own <- as.character(cell_modal_body(cells, d$pair_id, ev, evidence = ev))
+  expect_false(grepl("Supporting sentences", own))
+})
+
+test_that("a cell that is no longer there says so rather than erroring", {
+  skip_without_app()
+  rv <- scored_state()
+  cells <- shiny::isolate(rv$cells)
+  html <- as.character(cell_modal_body(cells, "no-such-pair", "location_country"))
+  expect_true(grepl("no longer", html))
+})
+
+test_that("a clicked tile key round-trips through either plot", {
+  skip_without_app()
+  rv <- scored_state()
+  cells <- shiny::isolate(rv$cells)
+  g <- ecoeval::paper_field_outcomes(cells, shiny::isolate(rv$scope$papers))
+  p <- ecoeval::plot_paper_heatmap(g)
+  tile <- ecoeval::parse_tile_key(p$data$key[[1L]])
+  expect_equal(tile$row, as.character(p$data$paper[[1L]]))
+  expect_equal(tile$field, as.character(p$data$field[[1L]]))
+
+  # The same key format identifies a record in the per-paper heatmap, which is
+  # what lets one parser serve both.
+  r <- ecoeval::record_field_outcomes(cells, "10.1000/p08")
+  pr <- ecoeval::plot_record_heatmap(r)
+  rtile <- ecoeval::parse_tile_key(pr$data$key[[1L]])
+  expect_equal(rtile$row, pr$data$pair_id[[1L]])
+  expect_equal(rtile$field, as.character(pr$data$field[[1L]]))
+})
+
+test_that("clicking a column name scopes the confusion matrix to that column", {
+  skip_without_app()
+  rv <- scored_state()
+  shiny::testServer(mod_dashboard_server,
+                    args = list(id = "dashboard", rv = rv), {
+    session$setInputs(column = "interaction_type")
+    expect_match(as.character(output$confusion_matrix$html), "every column")
+
+    # The plot abbreviates long column names, so the click arrives shortened.
+    field <- "all_supporting_source_sentences"
+    session$setInputs(column_click = paste0(substr(field, 1, 21), "…"))
+    html <- as.character(output$confusion_matrix$html)
+    expect_match(html, field)
+    # The counts are that column's, not the whole run's.
+    ct <- ecoeval::confusion_totals(rv$cells, field)
+    expect_true(grepl(sprintf("%d / %d", ct$tp, ct$tp + ct$fp), html, fixed = TRUE))
+    expect_true(ct$tp < ecoeval::confusion_totals(rv$cells)$tp)
+
+    session$setInputs(matrix_all = 1)
+    expect_match(as.character(output$confusion_matrix$html), "every column")
+  })
+})
+
+test_that("an abbreviated axis label finds its column again", {
+  skip_without_app()
+  fields <- c("year_observed", "all_supporting_source_sentences")
+  expect_equal(field_from_label("all_supporting_source…", fields),
+               "all_supporting_source_sentences")
+  expect_equal(field_from_label("year_observed", fields), "year_observed")
+  expect_null(field_from_label("nothing_like_it", fields))
+  expect_null(field_from_label("", fields))
+})
+
+test_that("the matrix shows the five boxes, coloured like the tiles", {
+  skip_without_app()
+  n <- c(agree = 57L, disagree = 21L, only_gold = 26L, only_ai = 14L, blank = 2L)
+  html <- as.character(confusion_matrix_ui(n))
+  for (colour in c("eco-green", "eco-purple", "eco-yellow", "eco-orange")) {
+    expect_true(grepl(colour, html, fixed = TRUE))
+  }
+  expect_true(grepl("true negative", html))
+  expect_true(grepl(">57<", html))
+})
+
+test_that("the interactive heatmap registers the click event it listens for", {
+  skip_without_app()
+  rv <- scored_state()
+  g <- ecoeval::paper_field_outcomes(shiny::isolate(rv$cells),
+                                     shiny::isolate(rv$scope$papers))
+  w <- interactive_heatmap(ecoeval::plot_paper_heatmap(g), "eco_heatmap",
+                           "dashboard-column_click")
+  # Without this registration plotly warns and event_data() stays empty, so
+  # clicking a tile would do nothing at all.
+  expect_true("plotly_click" %in% unlist(w$x$shinyEvents))
+  expect_equal(w$x$source, "eco_heatmap")
+  # And the column names carry their own handler.
+  js <- paste(vapply(w$jsHooks$render, function(h) h$code, character(1)),
+              collapse = " ")
+  expect_true(grepl("dashboard-column_click", js, fixed = TRUE))
+  expect_true(grepl("xtick", js, fixed = TRUE))
+})
+
+test_that("the cell modal says what happened, not just what decided it", {
+  skip_without_app()
+  rv <- scored_state()
+  cells <- shiny::isolate(rv$cells)
+  cfg <- shiny::isolate(rv$comparators)
+  ev <- "all_supporting_source_sentences"
+  # The p08 pair whose sentences the fuzzy rung could not settle.
+  pid <- cells$pair_id[cells$paper == "10.1000/p08" & cells$field == ev &
+                         cells$state == "disagree"][[1L]]
+  html <- as.character(cell_modal_body(cells, pid, ev, evidence = ev,
+                                       config = cfg))
+
+  # The verdict in words and what it costs, not a colour to decode.
+  expect_true(grepl("They differ", html))
+  expect_true(grepl("false positive and false negative", html))
+  # A similarity score means nothing without the cutoff it was measured against.
+  expect_true(grepl("0.660", html))
+  expect_true(grepl("0.85 cutoff", html))
+  # And an unsettled cell says it is provisional rather than looking decided.
+  expect_true(grepl("judge has not", html))
+})
+
+test_that("the modal names a schema violation rather than only marking it", {
+  skip_without_app()
+  rv <- scored_state()
+  cells <- shiny::isolate(rv$cells)
+  conf <- shiny::isolate(rv$conformance)
+  skip_if(is.null(conf) || !nrow(conf), "no violations in the fixtures")
+  bad <- conf[1, ]
+  hit <- cells[cells$field == bad$field &
+                 ecoeval::canonicalise(
+                   if (bad$source == "ai") cells$ai_value else cells$gold_value
+                 ) == ecoeval::canonicalise(bad$value), ][1, ]
+  keys <- paste(conf$source, conf$field, ecoeval::canonicalise(conf$value))
+  html <- as.character(cell_modal_body(cells, hit$pair_id, hit$field,
+                                       violations = keys))
+  expect_true(grepl("fails schema validation", html))
 })

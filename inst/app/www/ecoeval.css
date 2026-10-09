@@ -4,10 +4,10 @@
    state and a cell can be both. */
 
 :root {
-  --eco-green:  #2e9e5b;
-  --eco-yellow: #e8b53a;
-  --eco-orange: #e07b39;
-  --eco-purple: #8e6fbe;
+  --eco-green:  #2f9e5b;
+  --eco-yellow: #dfa60d;
+  --eco-orange: #a83a17;
+  --eco-purple: #6f56b0;
   --eco-blank:  #e9ecef;
   --eco-ai:     #2c7fb8;
   --eco-gold:   #7a5195;
@@ -50,6 +50,10 @@ body { background: #f7f8fa; color: var(--eco-ink); }
 .eco-panel h3 { font-size: 15px; font-weight: 640; margin: 0 0 4px; }
 .eco-panel .eco-note { color: var(--eco-muted); font-size: 12.5px; margin-bottom: 12px; }
 
+.eco-panel > summary { font-size: 13px; font-weight: 600; cursor: pointer;
+                       margin-bottom: 8px; }
+.eco-warn-inline { color: #a16207; }
+
 .eco-status { font-size: 13px; color: var(--eco-muted); }
 .eco-status strong { color: var(--eco-ink); }
 
@@ -72,30 +76,15 @@ body { background: #f7f8fa; color: var(--eco-ink); }
                  letter-spacing: .04em; }
 .eco-figure .s { font-size: 11.5px; color: var(--eco-muted); margin-top: 3px; }
 
-/* ---- the comparison grid ---- */
-
-.eco-cell { border-radius: 4px; padding: 4px 6px; min-height: 26px; line-height: 1.3; }
-.eco-cell.eco-green  { background: #e3f4ea; border-left: 3px solid var(--eco-green); }
-.eco-cell.eco-yellow { background: #fdf3dc; border-left: 3px solid var(--eco-yellow); }
-.eco-cell.eco-orange { background: #fbe9dd; border-left: 3px solid var(--eco-orange); }
-.eco-cell.eco-purple { background: #efe9f7; border-left: 3px solid var(--eco-purple); }
-.eco-cell.eco-blank  { background: #f6f7f9; border-left: 3px solid var(--eco-blank); }
-.eco-cell.eco-violation { outline: 2px dashed #d9534f; outline-offset: -2px; }
-
-.eco-v { font-size: 11.8px; white-space: normal; overflow-wrap: anywhere; }
-.eco-v.ai   { color: var(--eco-ai); }
-.eco-v.gold { color: var(--eco-gold); }
-.eco-v .tag { font-weight: 700; font-size: 9.5px; opacity: .65; margin-right: 3px; }
-
-.eco-id { font-size: 11.8px; }
-.eco-id .ai   { color: var(--eco-ai); font-weight: 600; }
-.eco-id .gold { color: var(--eco-gold); }
+/* ---- tables ---- */
 
 table.dataTable td { vertical-align: top; padding: 4px 5px !important; }
 table.dataTable thead th { font-size: 11.5px; font-weight: 620; }
 
 .eco-legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px;
               color: var(--eco-muted); margin: 8px 0 2px; }
+.sw { display: inline-block; width: 11px; height: 11px; border-radius: 3px;
+      vertical-align: baseline; }
 .eco-legend .sw { display: inline-block; width: 11px; height: 11px; border-radius: 3px;
                   margin-right: 5px; vertical-align: -1px; }
 
@@ -104,6 +93,27 @@ table.dataTable thead th { font-size: 11.5px; font-weight: 620; }
                    margin-bottom: 8px; overflow-wrap: anywhere; }
 .eco-modal-value .k { font-size: 10.5px; text-transform: uppercase;
                       letter-spacing: .04em; color: var(--eco-muted); }
+
+/* ---- the confusion matrix under the heatmap ---- */
+
+.eco-cm { border-collapse: separate; border-spacing: 6px; margin-top: 10px; }
+.eco-cm .eco-cm-head { font-size: 11.5px; font-weight: 600; color: var(--eco-muted);
+                       text-align: left; vertical-align: bottom; padding: 0 4px 2px; }
+.eco-cm td { vertical-align: top; }
+.eco-cm-box { border-radius: 6px; padding: 9px 11px; margin-bottom: 6px;
+              min-width: 168px; }
+.eco-cm-box:last-child { margin-bottom: 0; }
+.eco-cm-box.eco-green  { background: #e3f4ea; border-left: 3px solid var(--eco-green); }
+.eco-cm-box.eco-yellow { background: #fdf3dc; border-left: 3px solid var(--eco-yellow); }
+.eco-cm-box.eco-orange { background: #f8e6df; border-left: 3px solid var(--eco-orange); }
+.eco-cm-box.eco-purple { background: #ebe6f6; border-left: 3px solid var(--eco-purple); }
+.eco-cm-n { font-size: 20px; font-weight: 650; line-height: 1.1;
+            font-variant-numeric: tabular-nums; }
+.eco-cm-label { font-size: 12.5px; }
+.eco-cm-role { font-size: 11.5px; color: var(--eco-muted); }
+
+/* Column names in the heatmap open that column's matrix. */
+.eco-clickable-ticks .xtick text { cursor: pointer; }
 
 /* ---- comparator configuration table ---- */
 

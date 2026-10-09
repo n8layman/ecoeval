@@ -4,12 +4,14 @@
 \alias{prepare_records}
 \title{Put a record table into canonical form}
 \usage{
-prepare_records(df, paper_col, mapping = NULL, prefix = "r")
+prepare_records(df, paper_key = NULL, mapping = NULL, prefix = "r")
 }
 \arguments{
 \item{df}{A record table as read from disk.}
 
-\item{paper_col}{The column holding the paper identifier.}
+\item{paper_key}{The columns identifying the paper: an
+\code{\link[=paper_key]{ecoeval_paper_key}}, one or more column names, or \code{NULL} to
+detect them with \code{\link[=suggest_paper_key]{suggest_paper_key()}}.}
 
 \item{mapping}{A named character vector, \code{canonical_name = source_column},
 or \code{NULL} to keep the columns as they are.}

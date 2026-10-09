@@ -74,7 +74,7 @@ loaded_state <- function() shiny::isolate({
 
 mapped_state <- function() shiny::isolate({
   rv <- loaded_state()
-  rv$ai_paper_col <- "doi"; rv$gold_paper_col <- "doi"
+  rv$ai_paper_key <- paper_key("doi"); rv$gold_paper_key <- paper_key("doi")
   rv$ai <- prepare_records(rv$ai_raw, "doi", prefix = "a")
   rv$gold <- prepare_records(rv$gold_raw, "doi", prefix = "g")
   rv$ai_papers <- prepare_papers(rv$ai_papers_raw, "doi",

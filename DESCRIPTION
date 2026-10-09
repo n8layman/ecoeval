@@ -25,6 +25,7 @@ Imports:
     shinyFiles,
     DT,
     htmltools,
+    htmlwidgets,
     ggplot2,
     plotly,
     fastLink,

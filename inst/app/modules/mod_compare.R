@@ -3,18 +3,92 @@
 # Alignment review and results are the same screen: judging a link is far
 # easier with every field visible than in an abstract table of confidence
 # scores. Review is paper by paper, which keeps everything bounded -- a single
-# paper holds at most a hundred records and usually far fewer, so the grid is
-# small and recompute on every edit is free.
+# paper holds at most a hundred records and usually far fewer, so recompute on
+# every edit is free.
+#
+# This is also the only place the four outcome colours are exact. A tile here is
+# one record's value for one column: green means these two values agree, orange
+# means the AI asserted one the gold standard does not have. The overview on the
+# dashboard cannot say that -- its tiles cover several records at once -- so it
+# shades a rate instead and sends you here to see what the colours are made of.
 #
 # Paper-by-paper is the iteration path, not a mandatory gate. Someone who only
 # wants an accuracy figure never has to open this screen.
 
-GRID_LEGEND <- list(
-  c("green",  "Matched, values agree"),
-  c("yellow", "Matched, values disagree"),
-  c("orange", "Gold-only record"),
-  c("purple", "AI-only record")
-)
+# Past this many tiles, one trace per tile stops being worth it and the heatmap
+# renders as a static plot. A paper with a hundred records reaches it.
+RECORD_HEATMAP_MAX_TILES <- 900L
+RECORD_HEATMAP_SOURCE <- "eco_record_heatmap"
+
+# What one clicked tile shows: what each side said, the sentences each side
+# quoted for it, and how the verdict was reached. The quoted text is the thing
+# that settles a disagreement -- without it a reader has two values and no way
+# to tell which one read the paper correctly.
+cell_modal_body <- function(cells, pair_id, field, evidence = NA_character_,
+                            config = NULL, violations = character(0),
+                            label = NULL, kind = NULL) {
+  row <- cells[cells$pair_id == pair_id & cells$field == field, , drop = FALSE]
+  if (!nrow(row)) {
+    return(div(class = "eco-note", "That cell is no longer in the comparison."))
+  }
+  row <- row[1, ]
+
+  quote_row <- if (!is.na(evidence) && !identical(evidence, field)) {
+    cells[cells$pair_id == pair_id & cells$field == evidence, , drop = FALSE]
+  }
+  offending <- c(
+    AI = paste("ai", field, ecoeval::canonicalise(row$ai_value)) %in% violations,
+    `gold standard` = paste("gold", field,
+                            ecoeval::canonicalise(row$gold_value)) %in% violations
+  )
+  verdict <- state_verdict(row$state)
+  value_block <- function(label, value) {
+    div(class = "eco-modal-value",
+        div(class = "k", label),
+        div(if (is.na(value) || !nzchar(value))
+              span(style = "opacity:.45;", "— nothing here —") else value))
+  }
+
+  tagList(
+    div(class = "eco-status", style = "margin-bottom:10px;",
+        span(class = "sw",
+             style = sprintf("background:%s; margin-right:6px;",
+                             unname(ecoeval::ecoeval_palette()[[
+                               unname(ecoeval::state_colour(row$state))]]))),
+        tags$strong(verdict[[1L]]),
+        sprintf(" — %s · %s · %s", verdict[[2L]],
+                if (length(kind)) kind[[1L]] else "",
+                if (length(label)) label[[1L]] else "")),
+    value_block("AI", row$ai_value),
+    value_block("Gold standard", row$gold_value),
+    if (!is.null(quote_row) && nrow(quote_row)) {
+      tagList(
+        value_block("Supporting sentences — AI", quote_row$ai_value[[1L]]),
+        value_block("Supporting sentences — gold standard",
+                    quote_row$gold_value[[1L]])
+      )
+    },
+    div(class = "eco-status", tags$strong("Decided by: "), row$rung, " — ",
+        rung_explanation(row$rung, row$score, field_threshold(config, field))),
+    if (!is.na(row$rationale))
+      div(class = "eco-modal-value", style = "margin-top:10px;",
+          div(class = "k", "Rationale"), div(row$rationale)),
+    if (any(offending))
+      div(class = "eco-warn", style = "margin-top:10px;",
+          sprintf("The %s value fails schema validation for this column.",
+                  paste(names(offending)[offending], collapse = " and the "))),
+    if (isTRUE(row$pending))
+      div(class = "eco-warn", style = "margin-top:10px;",
+          "The cheap rungs could not settle this one and the judge has not",
+          "run yet, so it counts as a disagreement for now. Resolve all",
+          "differences to have the judge decide it."),
+    if (is.na(evidence))
+      div(class = "eco-note", style = "margin-top:10px;",
+          paste("No supporting-sentence column is being scored, so there is no",
+                "quoted text to show. If the extraction has one, map it in the",
+                "record-field stage."))
+  )
+}
 
 mod_compare_ui <- function(id) {
   ns <- NS(id)
@@ -24,20 +98,18 @@ mod_compare_ui <- function(id) {
       NULL, NULL,
       div(
         style = "display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin-bottom:8px;",
-        checkboxInput(ns("expand"), "Expand every row into two lines",
-                      value = TRUE, width = "280px"),
-        actionButton(ns("reject"), "Reject this link"),
-        actionButton(ns("mark_reviewed"), "Mark paper reviewed", class = "btn-primary")
+        actionButton(ns("mark_reviewed"), "Mark paper reviewed", class = "btn-primary"),
+        div(class = "eco-status",
+            "Click any tile for both values, the sentences each side quoted,",
+            "and what decided it.")
       ),
-      div(class = "eco-legend", lapply(GRID_LEGEND, function(x) {
-        span(span(class = "sw",
-                  style = sprintf("background:%s;", unname(ecoeval::ecoeval_palette()[[x[[1]]]]))),
-             x[[2]])
-      }),
-      span(span(class = "sw",
-                style = "background:#fff; outline:2px dashed #d9534f; outline-offset:-2px;"),
-           "Fails schema validation")),
-      div(style = "overflow-x:auto;", DT::DTOutput(ns("grid")))
+      uiOutput(ns("heatmap_ui")),
+      div(class = "eco-note", style = "margin-top:6px;",
+          span(class = "sw",
+               style = "background:#fff; outline:2px solid #d9534f; outline-offset:-2px; margin-right:6px;"),
+          "A dot marks a value that fails schema validation. Validity is",
+          "orthogonal to agreement -- a cell can be both -- so fill carries",
+          "agreement and the marker carries validity.")
     ),
     uiOutput(ns("link_panel"))
   )
@@ -93,7 +165,10 @@ mod_compare_server <- function(id, rv) {
     })
 
     observeEvent(input$paper, {
-      if (!identical(input$paper, rv$current_paper)) rv$current_paper <- input$paper
+      if (!identical(input$paper, rv$current_paper)) {
+        rv$current_paper <- input$paper
+        rv$focus_field <- NULL
+      }
     }, ignoreInit = TRUE)
 
     step <- function(by) {
@@ -101,128 +176,131 @@ mod_compare_server <- function(id, rv) {
       i <- match(rv$current_paper, papers)
       j <- min(max(i + by, 1L), length(papers))
       rv$current_paper <- papers[[j]]
+      # Walking to another paper leaves behind the column the overview sent us
+      # to; the outline would be pointing at nothing in particular.
+      rv$focus_field <- NULL
       updateSelectInput(session, "paper", selected = papers[[j]])
     }
     observeEvent(input$prev, step(-1L))
     observeEvent(input$nxt, step(1L))
 
-    # ---- the grid ----------------------------------------------------------
-    grid_data <- reactive({
-      cells <- paper_cells()
-      pp <- paper_pairs()
-      if (!nrow(pp)) return(NULL)
-      ident <- identity_fields(rv)
-      value_fields <- setdiff(scored_fields(rv), ident)
-      violations <- violation_keys(rv)
-      expand <- isTRUE(input$expand)
-
-      cell_html <- function(pair_id, field, identity = FALSE) {
-        row <- cells[cells$pair_id == pair_id & cells$field == field, , drop = FALSE]
-        if (!nrow(row)) return("")
-        colour <- unname(ecoeval::state_colour(row$state[[1L]]))
-        bad <- any(c(paste("ai", field, ecoeval::canonicalise(row$ai_value[[1L]])),
-                     paste("gold", field, ecoeval::canonicalise(row$gold_value[[1L]]))) %in%
-                     violations)
-        fmt <- function(x) {
-          if (is.na(x) || !nzchar(x)) return("<span style='opacity:.35'>--</span>")
-          htmltools::htmlEscape(x)
-        }
-        if (identity) {
-          sprintf('<div class="eco-id"><div class="ai">%s</div><div class="gold">%s</div></div>',
-                  fmt(row$ai_value[[1L]]), fmt(row$gold_value[[1L]]))
-        } else if (expand) {
-          sprintf('<div class="eco-cell eco-%s%s"><div class="eco-v ai"><span class="tag">AI</span>%s</div><div class="eco-v gold"><span class="tag">GS</span>%s</div></div>',
-                  colour, if (bad) " eco-violation" else "",
-                  fmt(row$ai_value[[1L]]), fmt(row$gold_value[[1L]]))
-        } else {
-          sprintf('<div class="eco-cell eco-%s%s"><div class="eco-v ai">%s</div></div>',
-                  colour, if (bad) " eco-violation" else "",
-                  fmt(row$ai_value[[1L]]))
-        }
-      }
-
-      out <- data.frame(Row = seq_len(nrow(pp)), check.names = FALSE)
-      out[["Kind"]] <- c(pair = "matched", ai_only = "AI only",
-                         gold_only = "gold only")[pp$kind]
-      # Identity columns pinned left, rendered as text -- the way a spreadsheet
-      # freezes ID columns. That is what makes the scan fast.
-      for (f in ident) {
-        out[[f]] <- vapply(pp$pair_id, cell_html, character(1), field = f,
-                           identity = TRUE)
-      }
-      for (f in value_fields) {
-        out[[f]] <- vapply(pp$pair_id, cell_html, character(1), field = f)
-      }
-      list(table = out, pair_ids = pp$pair_id,
-           fields = c(NA, NA, ident, value_fields))
+    # ---- the heatmap -------------------------------------------------------
+    # One tile per record per column, in the order the comparison produced:
+    # matched pairs, then AI-only, then gold-only.
+    heat <- reactive({
+      req(rv$cells, rv$current_paper)
+      ecoeval::record_field_outcomes(rv$cells, rv$current_paper,
+                                     scored_fields(rv), identity_fields(rv))
     })
 
-    output$grid <- DT::renderDT({
-      g <- grid_data()
-      if (is.null(g)) return(NULL)
-      DT::datatable(
-        g$table, rownames = FALSE, escape = FALSE,
-        selection = list(mode = "single", target = "cell"),
-        options = list(
-          pageLength = 25, dom = "tip", scrollX = TRUE,
-          columnDefs = list(
-            list(targets = 0, width = "34px"),
-            list(targets = 1, width = "72px")
-          )
-        )
-      )
-    }, server = FALSE)
+    # Cells that fail schema validation, keyed the way the plot marks them.
+    heat_violations <- reactive({
+      d <- heat()
+      if (!nrow(d)) return(character(0))
+      keys <- violation_keys(rv)
+      bad <- vapply(seq_len(nrow(d)), function(i) {
+        any(c(paste("ai", d$field[[i]], ecoeval::canonicalise(d$ai_value[[i]])),
+              paste("gold", d$field[[i]], ecoeval::canonicalise(d$gold_value[[i]]))) %in%
+              keys)
+      }, logical(1))
+      unique(paste(d$pair_id[bad], d$field[bad]))
+    })
 
-    selected_cell <- reactive({
-      sel <- input$grid_cells_selected
-      g <- grid_data()
-      if (is.null(g) || is.null(sel) || !length(sel) || !nrow(sel)) return(NULL)
-      i <- sel[1, 1] + 1L   # DT reports zero-based row and column
-      j <- sel[1, 2] + 1L
-      field <- g$fields[[j]]
-      if (is.na(field)) return(NULL)
-      list(pair_id = g$pair_ids[[i]], field = field)
+    heat_plot <- function() {
+      ecoeval::plot_record_heatmap(heat(), heat_violations(),
+                                   focus = rv$focus_field,
+                                   paper = rv$current_paper)
+    }
+    heat_rows <- reactive(length(unique(heat()$label)))
+
+    output$heatmap_ui <- renderUI({
+      d <- heat()
+      if (!nrow(d)) {
+        return(div(class = "eco-note", "Nothing to compare in this paper."))
+      }
+      h <- sprintf("%dpx", 26 * heat_rows() + 300)
+      if (nrow(d) <= RECORD_HEATMAP_MAX_TILES) {
+        plotly::plotlyOutput(ns("heatmap"), height = h)
+      } else {
+        tagList(
+          plotOutput(ns("heatmap_static"), height = h,
+                     click = ns("heatmap_click")),
+          div(class = "eco-note", style = "margin-top:6px;",
+              sprintf(paste("%d tiles is too many to make every one hoverable,",
+                            "so this one is static. Clicking still works."),
+                      nrow(d)))
+        )
+      }
+    })
+
+    output$heatmap <- plotly::renderPlotly({
+      interactive_heatmap(heat_plot(), RECORD_HEATMAP_SOURCE, NULL)
+    })
+    output$heatmap_static <- renderPlot(heat_plot())
+
+    # ---- which cell is open ------------------------------------------------
+    # The interactive plot hands back the tile's key; the static one hands back
+    # coordinates, which land on a tile because both axes are discrete.
+    # The nonce is what makes clicking the same tile twice reopen the modal: a
+    # reactiveVal set to an identical value does not fire.
+    selected <- reactiveVal(NULL)
+    clicks <- reactiveVal(0L)
+    select_cell <- function(pair_id, field) {
+      clicks(clicks() + 1L)
+      selected(list(pair_id = pair_id, field = field, nonce = clicks()))
+    }
+    selected_cell <- reactive(selected())
+
+    # A new paper invalidates whatever was open, and clears the column the
+    # overview asked us to look at once it has been seen.
+    observeEvent(rv$current_paper, {
+      selected(NULL)
+      removeModal()
+    }, ignoreInit = TRUE)
+
+    pair_from_label <- function(label) {
+      d <- heat()
+      hit <- d$pair_id[as.character(d$label) == label]
+      if (length(hit)) hit[[1L]] else NULL
+    }
+
+    observeEvent(plotly::event_data("plotly_click", source = RECORD_HEATMAP_SOURCE), {
+      ev <- plotly::event_data("plotly_click", source = RECORD_HEATMAP_SOURCE)
+      tile <- ecoeval::parse_tile_key(ev$key)
+      if (is.null(tile)) return()
+      select_cell(tile$row, tile$field)
+    })
+
+    observeEvent(input$heatmap_click, {
+      d <- heat()
+      p <- heat_plot()$data
+      x <- round(input$heatmap_click$x); y <- round(input$heatmap_click$y)
+      fields <- levels(p$field); labels <- levels(p$label)
+      if (is.na(x) || is.na(y) || x < 1L || y < 1L ||
+          x > length(fields) || y > length(labels)) return()
+      pid <- pair_from_label(labels[[y]])
+      if (!is.null(pid)) select_cell(pid, fields[[x]])
     })
 
     # ---- the cell modal ----------------------------------------------------
-    observeEvent(input$grid_cells_selected, {
+    observeEvent(selected(), {
       sc <- selected_cell()
       if (is.null(sc)) return()
       row <- rv$cells[rv$cells$pair_id == sc$pair_id & rv$cells$field == sc$field, ]
       if (!nrow(row)) return()
       row <- row[1, ]
-
-      rung_text <- switch(
-        row$rung,
-        exact = "The two values are byte-identical.",
-        normalized = "They agree once trimmed and case-folded.",
-        numeric = "Compared as numbers, within the configured tolerance.",
-        date = "Parsed as dates, then compared.",
-        set = "Compared as sets of values.",
-        fuzzy = sprintf("String similarity %.3f.", row$score),
-        judge = "The LLM judge decided this one.",
-        override = "You decided this one.",
-        blank = "One or both sides are blank.",
-        unpaired = "This record has no counterpart, so there is nothing to compare.",
-        row$rung
-      )
+      d <- heat()
 
       showModal(modalDialog(
         title = sc$field,
         size = "l", easyClose = TRUE,
-        div(class = "eco-modal-value",
-            div(class = "k", "AI"), div(row$ai_value %||% "--")),
-        div(class = "eco-modal-value",
-            div(class = "k", "Gold standard"), div(row$gold_value %||% "--")),
-        div(class = "eco-status", tags$strong("Decided by: "), row$rung, " — ",
-            rung_text),
-        if (!is.na(row$rationale))
-          div(class = "eco-modal-value", style = "margin-top:10px;",
-              div(class = "k", "Rationale"), div(row$rationale)),
-        if (isTRUE(row$pending))
-          div(class = "eco-warn", style = "margin-top:10px;",
-              "The cheap rungs could not settle this one and the judge has not",
-              "run yet, so it currently counts as a disagreement."),
+        cell_modal_body(
+          rv$cells, sc$pair_id, sc$field,
+          evidence = ecoeval::evidence_field(unique(rv$cells$field)),
+          config = rv$comparators, violations = violation_keys(rv),
+          label = unique(as.character(d$label[d$pair_id == sc$pair_id])),
+          kind = unique(d$kind[d$pair_id == sc$pair_id])
+        ),
         footer = tagList(
           if (row$state %in% c("agree", "disagree", "ai_missing", "gold_missing")) {
             tagList(
@@ -230,6 +308,10 @@ mod_compare_server <- function(id, rv) {
               actionButton(ns("say_different"), "They do not")
             )
           },
+          # Rejecting lives here now: the row this cell belongs to is exactly
+          # the link a person has just been given the evidence to doubt.
+          if (!is.na(row$ai_rid) && !is.na(row$gold_rid))
+            actionButton(ns("reject"), "These are not the same record"),
           modalButton("Close")
         )
       ))
@@ -252,11 +334,7 @@ mod_compare_server <- function(id, rv) {
     # ---- the three operations: reject, link, override ----------------------
     observeEvent(input$reject, {
       sc <- selected_cell()
-      if (is.null(sc)) {
-        showNotification("Click a cell in the row you want to unlink first.",
-                         type = "warning")
-        return()
-      }
+      if (is.null(sc)) return()
       row <- rv$pairs[rv$pairs$pair_id == sc$pair_id, ]
       if (!nrow(row) || row$kind[[1L]] != "pair") {
         showNotification("That row is not a link.", type = "warning")
@@ -264,6 +342,8 @@ mod_compare_server <- function(id, rv) {
       }
       rv$rejected <- dplyr::bind_rows(rv$rejected, tibble::tibble(
         ai_rid = row$ai_rid[[1L]], gold_rid = row$gold_rid[[1L]]))
+      selected(NULL)
+      removeModal()
       realign(rv)
     })
 

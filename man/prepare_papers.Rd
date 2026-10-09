@@ -4,15 +4,17 @@
 \alias{prepare_papers}
 \title{Put a paper list into canonical form}
 \usage{
-prepare_papers(df, paper_col, metadata = NULL)
+prepare_papers(df, paper_key = NULL, metadata = NULL)
 }
 \arguments{
 \item{df}{A paper table.}
 
-\item{paper_col}{The identifier column.}
+\item{paper_key}{The columns identifying the paper, as in
+\code{\link[=prepare_records]{prepare_records()}}; \code{NULL} detects them.}
 
 \item{metadata}{Named character vector of metadata columns to carry through
-for paper alignment, e.g. \code{c(title = "Title", year = "Year")}.}
+for paper alignment, e.g. \code{c(title = "Title", year = "Year")}.
+\code{\link[=paper_metadata_columns]{paper_metadata_columns()}} supplies the usual set.}
 }
 \value{
 A tibble with \code{.paper} plus the requested metadata columns.

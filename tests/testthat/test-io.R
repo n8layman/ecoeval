@@ -29,14 +29,6 @@ test_that("the AI paper list comes free from the documents table", {
   expect_true(length(setdiff(docs$doi, recs$doi)) > 0L)
 })
 
-test_that("DOI is preferred as the paper identifier", {
-  expect_equal(suggest_paper_column(tibble::tibble(ID = 1, DOI = "x", Title = "y")),
-               "DOI")
-  expect_equal(suggest_paper_column(tibble::tibble(a = 1, paper_id = "x")),
-               "paper_id")
-  expect_true(is.na(suggest_paper_column(tibble::tibble(a = 1, b = 2))))
-})
-
 test_that("mapping suggestions survive a change of naming convention", {
   m <- suggest_mapping(c("Bat Species", "Interaction Type", "Habitat Notes"),
                        c("bat_species", "interaction_type", "location"))
@@ -53,6 +45,8 @@ test_that("mapping is one-to-one -- a target is never suggested twice", {
 test_that("prepare_records keys rows and canonicalises the paper column", {
   raw <- read_table_any(fixture("ai_records.csv"))
   recs <- prepare_records(raw, "doi", prefix = "a")
+  # The column is found without being named, which is the normal path.
+  expect_equal(prepare_records(raw, prefix = "a")$.paper, recs$.paper)
   expect_true(all(c(".rid", ".paper") %in% names(recs)))
   expect_equal(anyDuplicated(recs$.rid), 0L)
   expect_false("doi" %in% names(recs))

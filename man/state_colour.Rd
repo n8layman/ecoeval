@@ -13,6 +13,8 @@ state_colour(state)
 A character vector of colour names.
 }
 \description{
-Fill carries agreement. Schema violations are marked, not coloured --
-validity is orthogonal to match state, and a cell can be both.
+Fill carries agreement, through \code{\link[=cell_outcome]{cell_outcome()}}, so the comparison grid and
+the overview heatmap say the same thing with the same four colours. Schema
+violations are marked, not coloured -- validity is orthogonal to match
+state, and a cell can be both.
 }

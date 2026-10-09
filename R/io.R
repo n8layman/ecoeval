@@ -109,26 +109,6 @@ read_ecoextract_documents <- function(path) {
   read_db_table(path, hit[[1L]])
 }
 
-#' Guess which column holds the paper identifier
-#'
-#' DOI first -- it is the only identifier in this domain that is actually
-#' unique -- then anything that looks like a document or paper key.
-#'
-#' @param df A table.
-#' @return A column name, or `NA_character_` when nothing looks like one.
-#' @export
-suggest_paper_column <- function(df) {
-  nm <- names(df)
-  sq <- squash_name(nm)
-  for (pat in c("^doi$", "doi", "^paperid$", "^documentid$", "^docid$",
-                "paperid", "documentid", "^filename$", "^file$", "^source$",
-                "paper", "document", "citation", "^title$")) {
-    hit <- which(grepl(pat, sq))
-    if (length(hit)) return(nm[[hit[[1L]]]])
-  }
-  if (length(nm)) NA_character_ else NA_character_
-}
-
 #' Suggest a 1:1 field mapping between two column sets
 #'
 #' Pre-populates the mapping screen with exact and fuzzy name matches. Mapping
@@ -179,7 +159,9 @@ suggest_mapping <- function(from, to, threshold = 0.8) {
 #' function expects records in this shape.
 #'
 #' @param df A record table as read from disk.
-#' @param paper_col The column holding the paper identifier.
+#' @param paper_key The columns identifying the paper: an
+#'   [`ecoeval_paper_key`][paper_key()], one or more column names, or `NULL` to
+#'   detect them with [suggest_paper_key()].
 #' @param mapping A named character vector, `canonical_name = source_column`,
 #'   or `NULL` to keep the columns as they are.
 #' @param prefix Prefix for generated row keys, so AI and gold keys never
@@ -187,21 +169,17 @@ suggest_mapping <- function(from, to, threshold = 0.8) {
 #'
 #' @return A tibble with `.rid`, `.paper`, and the canonical field columns.
 #' @export
-prepare_records <- function(df, paper_col, mapping = NULL, prefix = "r") {
+prepare_records <- function(df, paper_key = NULL, mapping = NULL, prefix = "r") {
   df <- tibble::as_tibble(df)
-  if (!is.null(paper_col) && !is.na(paper_col) && paper_col %in% names(df)) {
-    paper <- canonicalise(as.character(df[[paper_col]]))
-  } else {
-    paper <- rep(NA_character_, nrow(df))
-  }
-  paper[is_blank(paper)] <- NA_character_
+  key <- as_paper_key(paper_key, df)
+  paper <- paper_key_values(df, key)
 
   out <- tibble::tibble(
     .rid = sprintf("%s%05d", prefix, seq_len(nrow(df))),
     .paper = paper
   )
   if (is.null(mapping)) {
-    keep <- setdiff(names(df), paper_col)
+    keep <- setdiff(names(df), if (is.null(key)) character(0) else key$columns)
     for (nm in keep) out[[nm]] <- df[[nm]]
   } else {
     mapping <- mapping[!is.na(mapping) & mapping %in% names(df)]
@@ -213,17 +191,20 @@ prepare_records <- function(df, paper_col, mapping = NULL, prefix = "r") {
 #' Put a paper list into canonical form
 #'
 #' @param df A paper table.
-#' @param paper_col The identifier column.
+#' @param paper_key The columns identifying the paper, as in
+#'   [prepare_records()]; `NULL` detects them.
 #' @param metadata Named character vector of metadata columns to carry through
 #'   for paper alignment, e.g. `c(title = "Title", year = "Year")`.
+#'   [paper_metadata_columns()] supplies the usual set.
 #' @return A tibble with `.paper` plus the requested metadata columns.
 #' @export
-prepare_papers <- function(df, paper_col, metadata = NULL) {
+prepare_papers <- function(df, paper_key = NULL, metadata = NULL) {
   df <- tibble::as_tibble(df)
-  if (is.null(paper_col) || is.na(paper_col) || !paper_col %in% names(df)) {
+  key <- as_paper_key(paper_key, df)
+  if (is.null(key) || !all(key$columns %in% names(df))) {
     eco_abort("A paper list needs an identifier column.")
   }
-  out <- tibble::tibble(.paper = canonicalise(as.character(df[[paper_col]])))
+  out <- tibble::tibble(.paper = paper_key_values(df, key))
   if (!is.null(metadata)) {
     metadata <- metadata[!is.na(metadata) & metadata %in% names(df)]
     for (nm in names(metadata)) out[[nm]] <- df[[metadata[[nm]]]]
