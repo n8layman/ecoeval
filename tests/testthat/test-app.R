@@ -540,3 +540,50 @@ test_that("a data frame handed to run_eval_app() loads in place of a path", {
     expect_null(rv$config$inputs$ai)
   })
 })
+
+# ---- paths and axes (#18, #19) ----------------------------------------------
+
+test_that("a relative path in an older saved run resolves beside the run", {
+  skip_without_app()
+  cfg <- new_run_config()
+  cfg$inputs$ai <- "data/ai.csv"
+  cfg$inputs$gold <- "/abs/gold.csv"
+  launch <- launch_inputs(list(run_config = "/runs/a/run_config.json"), cfg)
+  expect_equal(launch$ai, "/runs/a/data/ai.csv")
+  expect_equal(launch$gold, "/abs/gold.csv")
+})
+
+test_that("a path typed into the load screen is relative to the caller", {
+  skip_without_app()
+  expect_equal(resolve_typed_path("out/a.csv", "/proj"), "/proj/out/a.csv")
+  expect_equal(resolve_typed_path("/abs/a.csv", "/proj"), "/abs/a.csv")
+  expect_equal(resolve_typed_path("a.csv", NULL), "a.csv")
+
+  dir <- withr::local_tempdir()
+  for (f in c("ai_records.csv", "gold_records.csv", "schema.json")) {
+    file.copy(fixture(f), file.path(dir, f))
+  }
+  rv <- new_app_state()
+  shiny::isolate(rv$args <- list(project_dir = dir))
+  shiny::testServer(mod_load_server, args = list(id = "load", rv = rv), {
+    session$setInputs(ai = "ai_records.csv", gold = "gold_records.csv",
+                      schema = "schema.json")
+    session$setInputs(load = 1)
+    expect_equal(nrow(rv$ai_raw), 12L)
+    expect_equal(rv$config$inputs$ai, normalizePath(file.path(dir, "ai_records.csv")))
+  })
+})
+
+test_that("both heatmaps keep their column names on top, vertical", {
+  skip_without_app()
+  fx <- fixture_run()
+  check <- function(p) {
+    w <- plotly::plotly_build(interactive_heatmap(p, "src", NULL))
+    expect_equal(w$x$layout$xaxis$side, "top")
+    expect_equal(w$x$layout$xaxis$tickangle, -90)
+    longest <- max(nchar(unlist(w$x$layout$xaxis$ticktext)))
+    expect_gte(w$x$layout$margin$t, 6.5 * longest)
+  }
+  check(plot_record_heatmap(record_field_outcomes(fx$cells, fx$scope$papers[[1L]])))
+  check(plot_paper_heatmap(paper_field_outcomes(fx$cells, fx$scope$papers)))
+})

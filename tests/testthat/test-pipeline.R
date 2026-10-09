@@ -195,3 +195,33 @@ test_that("evaluate_extraction takes the same setup inputs and fails loudly", {
     "identity column"
   )
 })
+
+# ---- paths (#18) -------------------------------------------------------------
+
+test_that("path arguments are made absolute before the app moves directory", {
+  dir <- withr::local_tempdir()
+  file.copy(fixture("schema.json"), file.path(dir, "schema.json"))
+  withr::with_dir(dir, {
+    expect_equal(absolute_path("schema.json"),
+                 normalizePath(file.path(dir, "schema.json")))
+    expect_error(absolute_path("nope.json"), "File not found: nope.json")
+  })
+  df <- data.frame(a = 1)
+  expect_identical(absolute_path(df), df)
+  expect_null(absolute_path(NULL))
+})
+
+test_that("a missing schema says so instead of a JSON parse error", {
+  expect_error(read_schema("schemas/schema.json"), "No schema at schemas/schema.json")
+})
+
+test_that("the run configuration records input paths absolute", {
+  dir <- withr::local_tempdir()
+  for (f in c("ai_records.csv", "gold_records.csv", "schema.json")) {
+    file.copy(fixture(f), file.path(dir, f))
+  }
+  loaded <- withr::with_dir(dir, load_inputs("ai_records.csv", "gold_records.csv",
+                                             "schema.json"))
+  expect_true(fs::is_absolute_path(loaded$inputs$ai))
+  expect_true(fs::is_absolute_path(loaded$inputs$schema))
+})

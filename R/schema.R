@@ -15,6 +15,9 @@
 #'   empty), `raw` (the parsed schema), and `path`.
 #' @export
 read_schema <- function(path) {
+  # Checked here, because jsonlite reads a string that is not a file as JSON
+  # text and reports the path itself as malformed.
+  if (!is.list(path) && !file.exists(path)) eco_abort(paste0("No schema at ", path))
   raw <- if (is.list(path)) path else jsonlite::fromJSON(path, simplifyVector = FALSE)
   node <- locate_record_object(raw)
   if (is.null(node)) {

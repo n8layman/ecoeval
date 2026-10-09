@@ -32,6 +32,19 @@
   scope. Previously only links whose identifiers matched exactly counted, so
   accepting a cross-identifier link the matcher proposed had no effect.
 
+## Fixes
+
+* `run_eval_app()` resolves relative paths against the caller's working
+  directory before launching, rather than letting them break once
+  `shiny::runApp()` moves into the app folder (#18). Paths typed into the load
+  screen and the file browser's project root follow the caller's directory too,
+  run configurations record input paths absolute, and a relative path in an
+  older saved run resolves beside the run configuration. A missing schema now
+  says so instead of reporting the path as malformed JSON.
+* The interactive heatmaps keep their column names along the top, vertical,
+  instead of losing that in the conversion to plotly and leaving the names
+  below a long paper (#19).
+
 # ecoeval 0.1.0
 
 First working version. The evaluation runs end to end: load two record sets and

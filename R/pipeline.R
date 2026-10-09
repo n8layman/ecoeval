@@ -77,7 +77,11 @@ load_inputs <- function(ai, gold, schema, ai_papers = NULL, gold_papers = NULL,
     if (is.data.frame(x)) return(tibble::as_tibble(x))
     read_table_any(x, table)
   }
-  path_of <- function(x) if (is.character(x)) x else NULL
+  # Recorded absolute, so a saved run reloads from wherever it is opened.
+  path_of <- function(x) {
+    if (!is.character(x)) return(NULL)
+    if (file.exists(x)) normalizePath(x) else x
+  }
 
   schema_obj <- if (inherits(schema, "ecoeval_schema")) schema else read_schema(schema)
   ai_pap <- read(ai_papers)
