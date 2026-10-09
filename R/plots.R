@@ -421,8 +421,15 @@ plot_record_heatmap <- function(grid, violations = character(0), focus = NULL,
   )
 
   pal <- ecoeval_palette()
-  fills <- c(agree = pal[["green"]], disagree = pal[["purple"]],
-             only_gold = pal[["yellow"]], only_ai = pal[["orange"]])
+  # Filled by the outcome's label rather than its code: ggplotly() names its
+  # legend entries from the data and ignores a scale's `labels`, so a code
+  # would show through as "only_ai".
+  shown <- outcome_labels(labels)
+  fills <- stats::setNames(
+    unname(pal[c("green", "purple", "yellow", "orange")]),
+    shown[c("agree", "disagree", "only_gold", "only_ai")]
+  )
+  d$fill <- factor(unname(shown[as.character(d$outcome)]), levels = unname(shown))
 
   # ggplot draws a legend key from a layer's data, so an outcome this paper
   # happens not to contain would get a label and no colour. A zero-sized tile
@@ -430,14 +437,14 @@ plot_record_heatmap <- function(grid, violations = character(0), focus = NULL,
   stub <- tibble::tibble(
     field = factor(levels(d$field)[[1L]], levels = levels(d$field)),
     label = factor(levels(d$label)[[1L]], levels = levels(d$label)),
-    outcome = factor(names(fills), levels = names(outcome_labels(labels)))
+    fill = factor(names(fills), levels = unname(shown))
   )
 
   p <- ggplot2::ggplot(d, ggplot2::aes(x = .data$field, y = .data$label,
-                                       fill = .data$outcome, text = .data$text,
+                                       fill = .data$fill, text = .data$text,
                                        key = .data$key)) +
     ggplot2::geom_tile(data = stub, ggplot2::aes(x = .data$field, y = .data$label,
-                                                 fill = .data$outcome),
+                                                 fill = .data$fill),
                        width = 0, height = 0, inherit.aes = FALSE) +
     ggplot2::geom_tile(colour = "white", linewidth = 0.7, show.legend = FALSE)
   if (!is.null(focus) && focus %in% levels(d$field)) {
@@ -453,8 +460,8 @@ plot_record_heatmap <- function(grid, violations = character(0), focus = NULL,
   p +
     # limits, not just drop = FALSE: an outcome absent from this paper still
     # belongs in the legend, so that four colours always mean four things.
-    ggplot2::scale_fill_manual(values = fills, labels = outcome_labels(labels),
-                               limits = names(fills), drop = FALSE, name = NULL) +
+    ggplot2::scale_fill_manual(values = fills, limits = names(fills),
+                               drop = FALSE, name = NULL) +
     ggplot2::guides(fill = ggplot2::guide_legend(nrow = 2, byrow = TRUE)) +
     ggplot2::scale_x_discrete(labels = function(x) truncate_label(x, 22, "start"),
                               expand = c(0, 0), position = "top") +

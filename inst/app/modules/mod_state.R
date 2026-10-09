@@ -385,16 +385,26 @@ interactive_heatmap <- function(p, source, input_id) {
 # a long paper. ggplotly() drops the axis position and the angle on the way
 # across, which leaves the names horizontal at the bottom, so restore both and
 # make room above the grid for the longest name.
+#
+# It also places a bottom legend a fraction of the grid's height below it, so
+# on a long paper the legend drifts hundreds of pixels down the page. Pin it
+# to the bottom of the widget instead, just under the grid.
 columns_on_top <- function(widget) {
   built <- plotly::plotly_build(widget)
   ticks <- as.character(unlist(built$x$layout$xaxis$ticktext))
   longest <- if (length(ticks)) max(nchar(ticks)) else 0L
   margin <- built$x$layout$margin %||% list()
   margin$t <- max(as.numeric(margin$t %||% 0), 6.5 * longest + 50)
+  has_legend <- length(built$x$layout$legend) > 0L &&
+    any(vapply(built$x$data, function(t) isTRUE(t$showlegend), logical(1)))
+  if (has_legend) margin$b <- max(as.numeric(margin$b %||% 0), 70)
   plotly::layout(
     built,
     xaxis = list(side = "top", tickangle = -90),
     margin = margin,
+    legend = if (has_legend) list(yref = "container", y = 0, yanchor = "bottom",
+                                  x = 0.5, xanchor = "center",
+                                  orientation = "h"),
     # The title sits above the names rather than across them.
     title = list(y = 0.995, yref = "container", yanchor = "top")
   )
