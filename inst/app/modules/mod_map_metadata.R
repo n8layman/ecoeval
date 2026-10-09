@@ -164,6 +164,7 @@ mod_map_metadata_server <- function(id, rv) {
       rv$ai_papers <- res$ai_papers
       rv$gold_papers <- res$gold_papers
       rv$metadata_fields <- res$metadata_fields
+      rv$documents <- res$documents
       # New keys mean new paper identifiers, so links made under the old ones
       # no longer apply.
       rv$paper_proposal <- NULL

@@ -13,7 +13,8 @@ place_papers(loaded, keys)
 }
 \value{
 A list with \code{ai}, \code{gold}, \code{ai_papers}, \code{gold_papers} (canonical, or
-\code{NULL}), \code{metadata_fields} (the paper metadata both lists carry), and
+\code{NULL}), \code{metadata_fields} (the paper metadata both lists carry),
+\code{documents} (each AI paper's text, from \code{\link[=document_texts]{document_texts()}}), and
 \code{warnings}.
 }
 \description{

@@ -14,6 +14,9 @@ new_app_state <- function() {
     ai_raw = NULL, gold_raw = NULL,
     ai_papers_raw = NULL, gold_papers_raw = NULL,
     schema = NULL,
+    # The OCR text, when the AI side is an ecoextract database: as read, and
+    # keyed by paper for the cell pop-up.
+    documents_raw = NULL, documents = NULL,
 
     # which columns identify a paper -- one ecoeval_paper_key per table
     ai_paper_key = NULL, gold_paper_key = NULL,
@@ -77,6 +80,7 @@ seed_state <- function(rv, run) {
     rv$gold_raw <- run$loaded$gold_raw
     rv$ai_papers_raw <- run$loaded$ai_papers_raw
     rv$gold_papers_raw <- run$loaded$gold_papers_raw
+    rv$documents_raw <- run$loaded$documents
     rv$config$inputs[names(run$loaded$inputs)] <- run$loaded$inputs
   }
   if (!is.null(run$keys)) {
@@ -92,6 +96,7 @@ seed_state <- function(rv, run) {
     rv$ai_papers <- run$placed$ai_papers
     rv$gold_papers <- run$placed$gold_papers
     rv$metadata_fields <- run$placed$metadata_fields
+    rv$documents <- run$placed$documents
   }
   if (!is.null(run$proposal)) rv$paper_proposal <- run$proposal
   if (!is.null(run$scoped)) {
@@ -213,7 +218,8 @@ launch_state <- function(rv, restored = NULL) {
 #' The raw inputs in the shape the pipeline's stage functions take
 loaded_inputs <- function(rv) {
   list(schema = rv$schema, ai_raw = rv$ai_raw, gold_raw = rv$gold_raw,
-       ai_papers_raw = rv$ai_papers_raw, gold_papers_raw = rv$gold_papers_raw)
+       ai_papers_raw = rv$ai_papers_raw, gold_papers_raw = rv$gold_papers_raw,
+       documents = rv$documents_raw)
 }
 
 #' The paper keys in the shape the pipeline's stage functions take
