@@ -118,3 +118,20 @@ eco_abort <- function(msg, class = NULL) {
 empty_tbl <- function(...) {
   tibble::as_tibble(lapply(list(...), function(x) x[0L]))
 }
+
+#' What a side actually said, for display
+#'
+#' Cells carry the value compared (`ai_value`) and, when a normaliser changed
+#' it, the value as read (`ai_original`). A cell table from before that column
+#' existed has only the first, which is then also the second.
+#'
+#' @param cells A cell tibble.
+#' @param side `"ai"` or `"gold"`.
+#' @return A character vector, one per row.
+#' @keywords internal
+#' @noRd
+original_values <- function(cells, side) {
+  orig <- cells[[paste0(side, "_original")]]
+  value <- cells[[paste0(side, "_value")]]
+  if (is.null(orig)) value else orig
+}

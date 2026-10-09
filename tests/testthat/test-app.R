@@ -81,13 +81,30 @@ test_that("accepting the paper links sets scope", {
   rv <- mapped_state()
   shiny::testServer(mod_align_papers_server,
                     args = list(id = "papers", rv = rv), {
-    session$setInputs(accept_all = 1)
+    # The matcher's verdict: P11 and P12 are different papers, and its guess
+    # that they are one falls below the cutoff.
     session$setInputs(apply = 1)
     expect_equal(length(rv$scope$papers), 10L)
     expect_equal(rv$scope$ai_only, "10.1000/p11")
     expect_equal(rv$scope$gold_only, "10.1000/p12")
     expect_null(rv$blocked)
     expect_equal(rv$stage, "fields")
+  })
+})
+
+test_that("an accepted link between two identifiers brings both into scope", {
+  skip_without_app()
+  rv <- mapped_state()
+  shiny::testServer(mod_align_papers_server,
+                    args = list(id = "papers", rv = rv), {
+    session$setInputs(accept_all = 1)
+    session$setInputs(apply = 1)
+    expect_equal(length(rv$scope$papers), 11L)
+    expect_true("10.1000/p11" %in% rv$scope$papers)
+    expect_length(rv$scope$ai_only, 0L)
+    expect_length(rv$scope$gold_only, 0L)
+    hit <- rv$paper_map[rv$paper_map$ai_paper == "10.1000/p11", ]
+    expect_equal(hit$gold_paper, "10.1000/p12")
   })
 })
 
@@ -404,4 +421,122 @@ test_that("the modal names a schema violation rather than only marking it", {
   html <- as.character(cell_modal_body(cells, hit$pair_id, hit$field,
                                        violations = keys))
   expect_true(grepl("fails schema validation", html))
+})
+
+# ---- launching with setup inputs ---------------------------------------------
+
+test_that("a launch with everything supplied opens on the comparison", {
+  skip_without_app()
+  rv <- shiny::isolate(new_app_state())
+  run <- setup_evaluation(
+    ai = fixture("ai_records.csv"), gold = fixture("gold_records.csv"),
+    schema = fixture("schema.json"), paper_key = "doi",
+    linkage_fields = "interaction_type", skip_setup = FALSE
+  )
+  shiny::isolate({
+    seed_state(rv, run)
+    expect_equal(rv$stage, "compare")
+    expect_true(stage_reachable(rv)$compare$open)
+    expect_equal(identity_fields(rv), "interaction_type")
+    expect_equal(rv$config$inputs$ai_paper_key, "doi")
+    expect_false(is.null(rv$ai_shown))
+  })
+})
+
+test_that("a launch short of a stage opens on that stage, pre-filled", {
+  skip_without_app()
+  rv <- shiny::isolate(new_app_state())
+  run <- setup_evaluation(
+    ai = fixture("ai_records.csv"), gold = fixture("gold_records.csv"),
+    schema = fixture("schema.json"), paper_key = "doi", skip_setup = FALSE,
+    normalizers = list(location_country = toupper)
+  )
+  shiny::isolate({
+    rv$normalizers <- list(location_country = toupper)
+    seed_state(rv, run)
+    expect_equal(rv$stage, "fields")
+    expect_false(stage_reachable(rv)$fields$done)
+  })
+  shiny::testServer(mod_map_records_server, args = list(id = "fields", rv = rv), {
+    session$setInputs(apply = 1)
+    expect_equal(rv$stage, "dashboard")
+    lc <- rv$cells[rv$cells$field == "location_country" & !is.na(rv$cells$ai_rid), ]
+    expect_true(all(lc$ai_value == toupper(lc$ai_original), na.rm = TRUE))
+    # Resetting drops the launch configuration for the schema's defaults.
+    rv$field_seed$linkage <- FALSE
+    session$setInputs(reset = 1)
+    expect_true(any(isolate(rv$field_seed %||% list(linkage = TRUE))$linkage))
+  })
+})
+
+test_that("launching runs the setup stages from the arguments", {
+  skip_without_app()
+  rv <- shiny::isolate(new_app_state())
+  shiny::isolate({
+    rv$args <- list(ai = fixture("ai_records.csv"), gold = fixture("gold_records.csv"),
+                    schema = fixture("schema.json"), paper_key = "doi",
+                    linkage_fields = "interaction_type")
+  })
+  run <- launch_state(rv)
+  expect_equal(run$stage, "scored")
+  expect_equal(shiny::isolate(rv$stage), "compare")
+
+  # Nothing supplied: nothing runs, and the app opens on the load screen.
+  rv <- shiny::isolate(new_app_state())
+  expect_null(launch_state(rv))
+  expect_equal(shiny::isolate(rv$stage), "load")
+
+  # A stage that fails opens on its screen with the reason.
+  rv <- shiny::isolate(new_app_state())
+  shiny::isolate(rv$args <- list(ai = "missing.csv", gold = "missing.csv",
+                                 schema = fixture("schema.json")))
+  run <- launch_state(rv)
+  expect_equal(shiny::isolate(rv$stage), "load")
+  expect_match(run$message, "not found")
+})
+
+test_that("arguments win over a restored run, which fills in the rest", {
+  skip_without_app()
+  cfg <- new_run_config()
+  cfg$inputs$ai <- "saved_ai.csv"
+  cfg$inputs$gold <- "saved_gold.csv"
+  cfg$inputs$ai_paper_key <- list("doi")
+  restored <- list(
+    comparators = default_comparator_config(read_schema(fixture("schema.json"))),
+    paper_map = tibble::tibble(ai_paper = "a", gold_paper = "a")
+  )
+  launch <- launch_inputs(list(ai = "given.csv", skip_setup = TRUE), cfg, restored)
+  expect_equal(launch$ai, "given.csv")
+  expect_equal(launch$gold, "saved_gold.csv")
+  expect_equal(launch$paper_key, list(ai = "doi"))
+  expect_equal(launch$paper_map$ai_paper, "a")
+  expect_equal(nrow(launch$comparator_config), 8L)
+  expect_true(launch$skip_setup)
+})
+
+test_that("the judge can be supplied or switched off", {
+  skip_without_app()
+  rv <- scored_state()
+  shiny::isolate({
+    rv$judge_mode <- "off"
+    expect_null(current_judge(rv))
+    expect_false(llm_allowed(rv))
+    j <- function(...) list(agree = TRUE, rationale = "ok")
+    rv$judge_mode <- "supplied"
+    rv$judge <- j
+    expect_identical(current_judge(rv), j)
+  })
+})
+
+test_that("a data frame handed to run_eval_app() loads in place of a path", {
+  skip_without_app()
+  rv <- new_app_state()
+  shiny::isolate(rv$args <- list(ai = utils::read.csv(fixture("ai_records.csv"))))
+  shiny::testServer(mod_load_server, args = list(id = "load", rv = rv), {
+    session$setInputs(ai = FRAME_PLACEHOLDER, gold = fixture("gold_records.csv"),
+                      schema = fixture("schema.json"))
+    session$setInputs(load = 1)
+    expect_equal(nrow(rv$ai_raw), 12L)
+    expect_null(rv$config$inputs$ai)
+  })
 })

@@ -13,7 +13,8 @@ aligned_table(cells, pairs)
 }
 \value{
 A wide tibble: the pair's identity columns, then \verb{ai_<field>},
-\verb{gold_<field>}, and \verb{state_<field>} for every scored field.
+\verb{gold_<field>}, and \verb{state_<field>} for every scored field. Values are
+what each side said, before any normaliser, as the grid shows them.
 }
 \description{
 One row per aligned record, mirroring the grid

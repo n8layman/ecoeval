@@ -19,7 +19,8 @@ first, the way a spreadsheet freezes its ID columns.}
 }
 \value{
 A tibble with \code{pair_id}, \code{label}, \code{kind}, \code{field}, \code{outcome},
-\code{state}, \code{ai_value}, \code{gold_value}.
+\code{state}, \code{ai_value}, \code{gold_value} (the values compared), and
+\code{ai_original}, \code{gold_original} (the values as read, which label the rows).
 }
 \description{
 The data behind the per-paper heatmap, and the place the four outcome

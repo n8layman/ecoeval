@@ -199,7 +199,11 @@ mod_dashboard_server <- function(id, rv) {
           div(class = "eco-status",
               sprintf("%d cells are unjudged. That is about %d LLM calls.", 
                       sum(rv$cells$pending), n)),
-          if (!ecoeval::judge_available())
+          if (identical(rv$judge_mode, "off"))
+            div(class = "eco-note", style = "margin-top:8px;",
+                "The LLM is switched off for this run (judge = NULL), so these",
+                "cells stay unjudged and count as disagreements.")
+          else if (identical(rv$judge_mode, "default") && !ecoeval::judge_available())
             div(class = "eco-warn", style = "margin-top:8px;",
                 "No LLM is configured. Set ANTHROPIC_API_KEY in .env and",
                 "install ellmer to enable the judge. Until then those cells",
@@ -229,23 +233,16 @@ mod_dashboard_server <- function(id, rv) {
     })
 
     observeEvent(input$resolve, {
-      judge <- ecoeval::make_judge(
-        descriptions = stats::setNames(rv$schema$fields$description,
-                                       rv$schema$fields$field)
-      )
+      judge <- current_judge(rv)
       if (is.null(judge)) {
         showNotification("No LLM is available.", type = "error")
         return()
       }
-      use <- rv$comparators[rv$comparators$include, , drop = FALSE]
       withProgress(message = "Asking the judge", value = 0, {
-        rv$cells <- ecoeval::score_cells(
-          rv$pairs, rv$ai, rv$gold, use,
-          judge = judge, cache = rv$judge_cache, overrides = rv$overrides,
-          progress = function(i, n) setProgress(i / n, detail = sprintf("%d of %d", i, n))
-        )
+        rescore(rv, judge = judge, progress = function(i, n) {
+          setProgress(i / n, detail = sprintf("%d of %d", i, n))
+        })
       })
-      rv$dirty <- rv$dirty + 1L
       showNotification("The judge has settled the contested cells.", type = "message")
     })
 

@@ -1,27 +1,70 @@
 #' Launch the ecoeval dashboard
 #'
 #' Evaluates AI extraction output against a human gold standard. All arguments
-#' are optional at launch -- the app collects whatever is missing -- but a
-#' schema must be supplied before the comparison stage.
+#' are optional at launch -- the app collects whatever is missing.
+#'
+#' Every input the setup screens ask for can be passed here instead. The app
+#' runs the setup stages it was given inputs for and opens on the first one it
+#' was not, so a launch with everything supplied opens straight on the
+#' comparison view. Pass `skip_setup = TRUE` to take the defaults for anything
+#' left out rather than stopping to ask. A stage that fails -- a column that is
+#' not there, a paper key the two sides cannot share -- opens on its screen
+#' with the reason.
 #'
 #' The app is a shell over a library. Everything it computes is available as
-#' plain functions over data frames ([read_schema()], [align_records()],
-#' [score_cells()], [field_metrics()], [export_bundle()]), so an evaluation can
-#' be scripted without launching anything.
+#' plain functions over data frames ([evaluate_extraction()],
+#' [setup_evaluation()], [score_cells()], [export_bundle()]), so an evaluation
+#' can be scripted without launching anything.
 #'
-#' @param ai Path to the AI record set: an ecoextract SQLite database, or a
-#'   CSV/Excel file.
-#' @param gold Path to the gold standard record set (CSV, Excel, or database).
-#' @param schema Path to the `schema.json` the AI extracted against. Required
-#'   before comparison; drives comparator defaults, enum conformance checks, and
+#' @param ai,gold The two record sets: a path (an ecoextract SQLite database,
+#'   CSV, Excel, ...) or a data frame. A data frame lets a caller shape records
+#'   before the evaluation, but a saved run cannot record it, so restoring that
+#'   run means passing it again.
+#' @param schema Path to the `schema.json` the AI extracted against, or an
+#'   `ecoeval_schema`. Drives comparator defaults, enum conformance checks, and
 #'   the default linkage-field suggestion.
-#' @param ai_papers,gold_papers Optional paths to paper lists ("papers
-#'   processed" / "papers reviewed") as distinct from records found. For an
-#'   ecoextract database `ai_papers` is read from the `documents` table.
+#' @param ai_papers,gold_papers Optional paper lists ("papers processed" /
+#'   "papers reviewed") as distinct from records found: paths or data frames.
+#'   For an ecoextract database `ai_papers` is read from the `documents` table.
 #'   Supplying these widens scope -- see `DESIGN.md`.
+#' @param ai_table,gold_table Table names, for database input. Defaults to the
+#'   largest table.
+#' @param paper_key The columns identifying the paper: a [paper_key()] or
+#'   column names applied to every table, or a named list by table (`ai`,
+#'   `gold`, `ai_papers`, `gold_papers`). Detected when `NULL`.
+#' @param paper_map The paper links to use: a data frame with `ai_paper` and
+#'   `gold_paper`, in the identifiers the paper key produces. When `NULL` the
+#'   matcher proposes them.
+#' @param auto_accept When `paper_map` is `NULL`, accept the matcher's
+#'   high-confidence links and leave the rest out of scope without stopping to
+#'   review them. A warning says how many were left out.
+#' @param mapping Record field mapping: `list(ai = c(field = "column"), gold =
+#'   c(field = "column"))`. Fields named here override the suggested mapping;
+#'   `NA` maps a field to nothing.
+#' @param comparator_config Comparator settings: a data frame with a `field`
+#'   column and any of the columns [default_comparator_config()] returns. Rows
+#'   replace the defaults for their field, so it may cover some fields or all.
+#' @param linkage_fields The identity columns records are matched on. Defaults
+#'   to the schema's `x-unique-fields`.
+#' @param fields The fields to score. Defaults to every field both sides have.
+#' @param normalizers Optional named list of functions, by field, applied to
+#'   both sides' values before matching and comparison -- for instance mapping
+#'   a gold standard's codes onto the wording the documents use. The grid and
+#'   tooltips still show what each side actually said. Functions cannot be
+#'   saved in a run configuration, so pass them again when restoring a run.
+#' @param skip Processing steps to leave out; see [skippable_steps()].
+#'   `"normalize"` turns off the normalisers, built-in and supplied.
+#' @param judge The LLM judge for "Resolve all differences": a function from
+#'   [make_judge()], or `NULL` to turn every LLM step off -- the judge and the
+#'   built-in LLM normaliser. When omitted the app builds one from the schema's
+#'   field descriptions, as before. The judge only runs when asked to, so
+#'   launching never spends money on it.
+#' @param skip_setup When `TRUE`, take the default for every setup input not
+#'   supplied rather than opening its screen.
 #' @param run_config Optional path to a `run_config.json` from an earlier
-#'   session. Reload it and you are exactly where you were -- mappings, manual
-#'   link decisions, and cached LLM verdicts included.
+#'   session. Reload it and you are exactly where you were -- inputs, mappings,
+#'   manual link decisions, and cached LLM verdicts included. Arguments passed
+#'   here take precedence over what it holds.
 #' @param launch.browser Passed to [shiny::runApp()].
 #' @param ... Reserved.
 #'
@@ -32,10 +75,20 @@
 #' run_eval_app()
 #'
 #' # Or supply them up front.
+#' ex <- function(f) system.file("extdata", f, package = "ecoeval")
+#' run_eval_app(ai = ex("ai_records.csv"), gold = ex("gold_records.csv"),
+#'              schema = ex("schema.json"))
+#'
+#' # Supply everything and open straight on the comparison.
 #' run_eval_app(
-#'   ai     = system.file("extdata", "ai_records.csv", package = "ecoeval"),
-#'   gold   = system.file("extdata", "gold_records.csv", package = "ecoeval"),
-#'   schema = system.file("extdata", "schema.json", package = "ecoeval")
+#'   ai = ex("ai_records.csv"), gold = ex("gold_records.csv"),
+#'   schema = ex("schema.json"),
+#'   paper_key = "doi",
+#'   linkage_fields = c("bat_species_scientific_name", "interaction_type"),
+#'   normalizers = list(
+#'     location_country = function(x) dplyr::recode(x, USA = "United States")
+#'   ),
+#'   judge = NULL
 #' )
 #' }
 #' @export
@@ -44,6 +97,19 @@ run_eval_app <- function(ai = NULL,
                          schema = NULL,
                          ai_papers = NULL,
                          gold_papers = NULL,
+                         ai_table = NULL,
+                         gold_table = NULL,
+                         paper_key = NULL,
+                         paper_map = NULL,
+                         auto_accept = TRUE,
+                         mapping = NULL,
+                         comparator_config = NULL,
+                         linkage_fields = NULL,
+                         fields = NULL,
+                         normalizers = NULL,
+                         skip = character(0),
+                         judge,
+                         skip_setup = FALSE,
                          run_config = NULL,
                          launch.browser = TRUE,
                          ...) {
@@ -51,12 +117,25 @@ run_eval_app <- function(ai = NULL,
   if (!nzchar(app_dir)) {
     eco_abort("The app directory is missing -- reinstall ecoeval.")
   }
-  for (p in c(ai, gold, schema, ai_papers, gold_papers, run_config)) {
-    if (!is.null(p) && !file.exists(p)) eco_abort(paste0("File not found: ", p))
+  for (p in list(ai, gold, schema, ai_papers, gold_papers, run_config)) {
+    if (is.character(p) && !file.exists(p)) eco_abort(paste0("File not found: ", p))
+  }
+  check_skip(skip)
+  judge_mode <- if (missing(judge)) "default" else if (is.null(judge)) "off" else "supplied"
+  if (judge_mode == "supplied" && !is.function(judge)) {
+    eco_abort("`judge` is a function from make_judge(), or NULL to turn it off.")
   }
   shiny::shinyOptions(ecoeval_args = list(
     ai = ai, gold = gold, schema = schema,
     ai_papers = ai_papers, gold_papers = gold_papers,
+    ai_table = ai_table, gold_table = gold_table,
+    paper_key = paper_key, paper_map = paper_map, auto_accept = auto_accept,
+    mapping = mapping, comparator_config = comparator_config,
+    linkage_fields = linkage_fields, fields = fields,
+    normalizers = normalizers, skip = skip,
+    judge_mode = judge_mode,
+    judge = if (judge_mode == "supplied") judge,
+    skip_setup = skip_setup,
     run_config = run_config
   ))
   shiny::runApp(app_dir, launch.browser = launch.browser)
@@ -81,78 +160,56 @@ app_directory <- function() {
 #' Run an evaluation end to end without the app
 #'
 #' The headless path the app is a shell over. Useful for a scripted run, a
-#' regression check, or producing an export bundle in CI.
+#' regression check, or producing an export bundle in CI. It runs the same
+#' stages as the app's setup screens ([setup_evaluation()]), taking the default
+#' for anything not supplied.
 #'
-#' @param ai,gold Paths to the two record sets, or record tibbles already in
-#'   canonical form.
-#' @param schema Path to `schema.json`, or an `ecoeval_schema`.
-#' @param ai_papers,gold_papers Optional paper list paths or tibbles.
-#' @param paper_key The columns identifying the paper -- see [paper_key()].
-#'   Detected per table when `NULL`.
-#' @param linkage_fields Linkage fields. Defaults to the schema suggestion.
-#' @param judge An optional judge from [make_judge()].
+#' @inheritParams run_eval_app
+#' @param judge An optional judge from [make_judge()], run on the cells the
+#'   cheaper rungs cannot settle. `NULL` (the default) leaves them pending and
+#'   also keeps the built-in LLM normaliser off.
 #'
 #' @return A list with `schema`, `ai`, `gold`, `scope`, `paper_map`, `config`,
-#'   `pairs`, `cells`, `findings` -- the same objects the app holds.
+#'   `pairs`, `cells`, `conformance`, `findings` -- the same objects the app
+#'   holds.
 #' @export
 evaluate_extraction <- function(ai, gold, schema,
                                 ai_papers = NULL, gold_papers = NULL,
                                 paper_key = NULL, linkage_fields = NULL,
-                                judge = NULL) {
-  schema <- if (inherits(schema, "ecoeval_schema")) schema else read_schema(schema)
-
-  ai_raw <- if (is.data.frame(ai)) ai else read_table_any(ai)
-  gold_raw <- if (is.data.frame(gold)) gold else read_table_any(gold)
-
-  ai_key <- as_paper_key(paper_key, ai_raw)
-  gold_key <- as_paper_key(paper_key, gold_raw)
-  key_cols <- function(k) if (is.null(k)) character(0) else k$columns
-  ai_map <- suggest_mapping(setdiff(names(ai_raw), key_cols(ai_key)),
-                            schema$fields$field)
-  gold_map <- suggest_mapping(setdiff(names(gold_raw), key_cols(gold_key)),
-                              schema$fields$field)
-  to_named <- function(m) stats::setNames(m$from[!is.na(m$to)], m$to[!is.na(m$to)])
-
-  ai_c <- prepare_records(ai_raw, ai_key, to_named(ai_map), prefix = "a")
-  gold_c <- prepare_records(gold_raw, gold_key, to_named(gold_map), prefix = "g")
-
-  load_papers <- function(x) {
-    if (is.null(x)) return(NULL)
-    raw <- if (is.data.frame(x)) x else read_table_any(x)
-    prepare_papers(raw, paper_key, paper_metadata_columns(raw))
-  }
-  ai_p <- load_papers(ai_papers)
-  gold_p <- load_papers(gold_papers)
-
-  scope <- compute_scope(paper_set(ai_c, ai_p), paper_set(gold_c, gold_p))
-  fields <- intersect(schema$fields$field, intersect(names(ai_c), names(gold_c)))
-  blocked <- blocking_condition(scope, fields)
-  if (!is.null(blocked)) eco_abort(blocked)
-
-  config <- default_comparator_config(schema, fields = fields,
-                                      linkage = linkage_fields)
-  linkage <- config$field[config$linkage]
-  paper_map <- tibble::tibble(ai_paper = scope$papers, gold_paper = scope$papers)
-
-  pairs <- align_records(ai_c, gold_c, linkage, paper_map)
-  cells <- score_cells(pairs, ai_c, gold_c, config, judge = judge,
-                       cache = new_cache())
-  conformance <- dplyr::bind_rows(
-    check_conformance(ai_c, schema, "ai"),
-    check_conformance(gold_c, schema, "gold")
+                                judge = NULL,
+                                paper_map = NULL, auto_accept = TRUE,
+                                mapping = NULL, comparator_config = NULL,
+                                fields = NULL, normalizers = NULL,
+                                skip = character(0),
+                                ai_table = NULL, gold_table = NULL) {
+  run <- setup_evaluation(
+    ai = ai, gold = gold, schema = schema,
+    ai_papers = ai_papers, gold_papers = gold_papers,
+    ai_table = ai_table, gold_table = gold_table,
+    paper_key = paper_key, paper_map = paper_map, auto_accept = auto_accept,
+    mapping = mapping, comparator_config = comparator_config,
+    linkage_fields = linkage_fields, fields = fields,
+    normalizers = normalizers, skip = skip,
+    judge = judge, llm = !is.null(judge), skip_setup = TRUE
   )
+  if (!identical(run$stage, "scored")) {
+    eco_abort(run$message %||% sprintf("The evaluation stopped at the %s stage.",
+                                       run$stage))
+  }
+  for (w in run$warnings) rlang::warn(w)
+
+  config <- run$config
+  scored <- run$scored
+  linkage <- config$field[config$include & config$linkage]
   findings <- collect_findings(
-    cells, pairs, conformance, schema,
-    gold_fields = setdiff(names(gold_c), c(".rid", ".paper")),
-    collapses = granularity_check(gold_c, linkage, "gold"),
-    dropped_fields = setdiff(
-      union(setdiff(names(ai_c), c(".rid", ".paper")),
-            setdiff(names(gold_c), c(".rid", ".paper"))),
-      fields
-    ),
+    scored$cells, scored$pairs, scored$conformance, run$loaded$schema,
+    gold_fields = config$field[!is.na(config$gold_col)],
+    collapses = scored$collapses,
+    dropped_fields = config$field[xor(is.na(config$ai_col), is.na(config$gold_col))],
     linkage_fields = linkage
   )
-  list(schema = schema, ai = ai_c, gold = gold_c, scope = scope,
-       paper_map = paper_map, config = config, pairs = pairs, cells = cells,
-       conformance = conformance, findings = findings)
+  list(schema = run$loaded$schema, ai = scored$ai, gold = scored$gold,
+       scope = run$scoped$scope, paper_map = run$scoped$paper_map,
+       config = config, pairs = scored$pairs, cells = scored$cells,
+       conformance = scored$conformance, findings = findings)
 }

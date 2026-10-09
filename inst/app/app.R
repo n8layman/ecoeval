@@ -65,15 +65,19 @@ ui <- fluidPage(
 server <- function(input, output, session) {
   rv <- new_app_state()
 
-  # Anything supplied to run_eval_app() is pre-filled; the app collects the rest.
+  # Anything supplied to run_eval_app() is used; the app collects the rest.
   args <- getShinyOption("ecoeval_args", list())
   rv$args <- args
+  rv$normalizers <- args$normalizers
+  rv$skip <- args$skip %||% character(0)
+  rv$judge_mode <- args$judge_mode %||% "default"
+  rv$judge <- args$judge
+
+  restored <- NULL
   if (!is.null(args$run_config)) {
     tryCatch({
       rv$config <- ecoeval::read_run_config(args$run_config)
       restored <- ecoeval::restore_run_tables(rv$config)
-      rv$comparators <- restored$comparators
-      rv$paper_map <- restored$paper_map
       rv$rejected <- restored$rejected
       rv$added <- restored$added
       rv$overrides <- restored$overrides
@@ -85,6 +89,14 @@ server <- function(input, output, session) {
       showNotification(paste("Could not read the run configuration:",
                              conditionMessage(e)), type = "error", duration = NULL)
     })
+  }
+
+  # Run the setup stages as far as the arguments -- and a restored run -- go,
+  # and open on the first one that still needs the user.
+  run <- withProgress(message = "Setting up the evaluation", value = 0.5,
+                      launch_state(rv, restored))
+  if (!is.null(run$message) && is.null(isolate(rv$blocked))) {
+    showNotification(run$message, type = "warning", duration = NULL)
   }
 
   mod_load_server("load", rv)

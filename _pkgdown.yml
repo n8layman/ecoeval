@@ -60,6 +60,24 @@ reference:
       - run_eval_app
       - evaluate_extraction
 
+  - title: The pipeline, stage by stage
+    desc: >
+      The stages the app's setup screens and evaluate_extraction() share.
+      setup_evaluation() chains them and stops at the first one it has no input
+      for, which is how run_eval_app() opens past the screens it was given
+      everything for.
+    contents:
+      - setup_evaluation
+      - load_inputs
+      - choose_paper_keys
+      - place_papers
+      - propose_paper_links
+      - set_scope
+      - configure_fields
+      - apply_normalizers
+      - score_evaluation
+      - skippable_steps
+
   - title: Loading the inputs
     desc: >
       Four data inputs, symmetric across the two sources, plus the schema.

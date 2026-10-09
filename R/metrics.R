@@ -584,16 +584,20 @@ paper_field_outcomes <- function(cells, papers = NULL, fields = NULL) {
 #'   first, the way a spreadsheet freezes its ID columns.
 #'
 #' @return A tibble with `pair_id`, `label`, `kind`, `field`, `outcome`,
-#'   `state`, `ai_value`, `gold_value`.
+#'   `state`, `ai_value`, `gold_value` (the values compared), and
+#'   `ai_original`, `gold_original` (the values as read, which label the rows).
 #' @export
 record_field_outcomes <- function(cells, paper, fields = NULL,
                                   identity = character(0)) {
   proto <- empty_tbl(pair_id = character(), label = character(),
                      kind = character(), field = character(),
                      outcome = character(), state = character(),
-                     ai_value = character(), gold_value = character())
+                     ai_value = character(), gold_value = character(),
+                     ai_original = character(), gold_original = character())
   d <- cells[cells$paper %in% paper, , drop = FALSE]
   if (!nrow(d)) return(proto)
+  d$ai_original <- original_values(d, "ai")
+  d$gold_original <- original_values(d, "gold")
 
   fields <- fields %||% unique(d$field)
   fields <- c(intersect(identity, fields), setdiff(fields, identity))
@@ -607,8 +611,8 @@ record_field_outcomes <- function(cells, paper, fields = NULL,
   labels <- vapply(ids, function(pid) {
     rows <- d[d$pair_id == pid & d$field %in% identity, , drop = FALSE]
     # The gold standard is the reference, so it names the row where it has one.
-    v <- rows$gold_value
-    if (!length(v) || all(is_blank(v))) v <- rows$ai_value
+    v <- rows$gold_original
+    if (!length(v) || all(is_blank(v))) v <- rows$ai_original
     v <- v[!is_blank(v)]
     if (!length(v)) pid else paste(v, collapse = " · ")
   }, character(1), USE.NAMES = FALSE)
@@ -627,7 +631,7 @@ record_field_outcomes <- function(cells, paper, fields = NULL,
     d$label <- ifelse(d$pair_id %in% ids[dup], suffix[d$pair_id], d$label)
   }
   out <- d[, c("pair_id", "label", "kind", "field", "outcome", "state",
-               "ai_value", "gold_value")]
+               "ai_value", "gold_value", "ai_original", "gold_original")]
   dplyr::arrange(out, match(.data$pair_id, ids), .data$field)
 }
 

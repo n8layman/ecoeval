@@ -25,6 +25,7 @@ mod_map_records_ui <- function(id) {
             "case-insensitive, then fuzzy, then the LLM judge. Each rung sees",
             "only what the previous could not resolve."),
       div(style = "overflow-x:auto;", uiOutput(ns("config_table"))),
+      uiOutput(ns("skip_note")),
       div(style = "margin-top:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;",
           actionButton(ns("apply"), "Align records and score", class = "btn-primary"),
           actionButton(ns("reset"), "Reset to schema defaults"),
@@ -41,22 +42,22 @@ mod_map_records_server <- function(id, rv) {
     reset_token <- reactiveVal(0L)
 
     # ---- what the schema and the two column sets suggest --------------------
+    # A configuration supplied at launch, or the one last applied, wins over
+    # the schema's defaults until the user resets.
     suggestion <- reactive({
       req(rv$schema, rv$ai_raw, rv$gold_raw)
       reset_token()
-      fields <- rv$schema$fields$field
-      ai_cols <- setdiff(names(rv$ai_raw), rv$ai_paper_key$columns)
-      gold_cols <- setdiff(names(rv$gold_raw), rv$gold_paper_key$columns)
-      ai_map <- ecoeval::suggest_mapping(fields, ai_cols)
-      gold_map <- ecoeval::suggest_mapping(fields, gold_cols)
-      cfg <- ecoeval::default_comparator_config(rv$schema, fields = fields)
-      cfg$ai_col <- ai_map$to
-      cfg$gold_col <- gold_map$to
-      # A field neither source has is nothing to compare, so it starts off.
-      cfg$include <- !is.na(cfg$ai_col) & !is.na(cfg$gold_col)
-      cfg$linkage <- cfg$linkage & cfg$include
-      cfg
+      rv$field_seed %||% ecoeval::configure_fields(
+        rv$schema, rv$ai_raw, rv$gold_raw, current_keys(rv),
+        normalizers = rv$normalizers
+      )
     })
+
+    # A field with a normaliser supplied to run_eval_app() can choose it.
+    normalizer_options <- function(field) {
+      c(ecoeval::normalizer_choices(),
+        if (field %in% names(rv$normalizers)) c("Supplied function" = "custom"))
+    }
 
     output$config_table <- renderUI({
       cfg <- suggestion()
@@ -85,7 +86,7 @@ mod_map_records_server <- function(id, rv) {
                                value = cfg$threshold[[i]], min = 0, max = 1,
                                step = 0.01)),
           tags$td(selectInput(ns(paste0("nrm_", i)), NULL,
-                              choices = ecoeval::normalizer_choices(),
+                              choices = normalizer_options(f),
                               selected = cfg$normalizer[[i]])),
           tags$td(checkboxInput(ns(paste0("lnk_", i)), NULL, value = cfg$linkage[[i]]))
         )
@@ -102,7 +103,15 @@ mod_map_records_server <- function(id, rv) {
       )
     })
 
+    output$skip_note <- renderUI({
+      if (!"normalize" %in% rv$skip) return(NULL)
+      div(class = "eco-note", style = "margin-top:8px;",
+          "Normalisation is switched off for this run, so the Normalise",
+          "column has no effect.")
+    })
+
     observeEvent(input$reset, {
+      rv$field_seed <- NULL
       reset_token(reset_token() + 1L)
       showNotification("Reset to the schema's defaults.", type = "message")
     })
@@ -173,51 +182,24 @@ mod_map_records_server <- function(id, rv) {
         return(invisible(NULL))
       }
 
-      withProgress(message = "Aligning and scoring", value = 0, {
-        use <- cfg[cfg$include, , drop = FALSE]
-
-        incProgress(0.1, detail = "reading columns")
-        rv$ai <- ecoeval::prepare_records(
-          rv$ai_raw, rv$ai_paper_key,
-          stats::setNames(use$ai_col, use$field), prefix = "a")
-        rv$gold <- ecoeval::prepare_records(
-          rv$gold_raw, rv$gold_paper_key,
-          stats::setNames(use$gold_col, use$field), prefix = "g")
-
-        # Normalisation is a pre-matching step, per value and cached: fastLink
-        # cannot see through "Myotis lucifugus" against "little brown bat", and
-        # those are exactly the fields it depends on most.
-        incProgress(0.15, detail = "normalising identity columns")
-        norm_fields <- use$field[use$normalizer != "none"]
-        for (f in norm_fields) {
-          nrm <- use$normalizer[[match(f, use$field)]]
-          rv$ai[[f]] <- ecoeval::normalize_values(rv$ai[[f]], nrm, rv$norm_cache)
-          rv$gold[[f]] <- ecoeval::normalize_values(rv$gold[[f]], nrm, rv$norm_cache)
-        }
-
-        incProgress(0.2, detail = "checking the schema")
-        rv$conformance <- dplyr::bind_rows(
-          ecoeval::check_conformance(rv$ai, rv$schema, "ai"),
-          ecoeval::check_conformance(rv$gold, rv$schema, "gold")
+      res <- withProgress(message = "Aligning and scoring", value = 0.3, {
+        tryCatch(
+          ecoeval::score_evaluation(
+            loaded_inputs(rv), current_keys(rv), cfg, rv$paper_map,
+            normalizers = rv$normalizers, skip = rv$skip, llm = llm_allowed(rv),
+            judge_cache = rv$judge_cache, norm_cache = rv$norm_cache,
+            rejected = rv$rejected, added = rv$added, overrides = rv$overrides
+          ),
+          error = function(e) e
         )
-
-        linkage <- use$field[use$linkage]
-        rv$collapses <- ecoeval::granularity_check(rv$gold, linkage, "gold")
-
-        incProgress(0.3, detail = "matching records")
-        rv$pairs <- ecoeval::align_records(rv$ai, rv$gold, linkage, rv$paper_map,
-                                           rejected = rv$rejected, added = rv$added)
-
-        incProgress(0.2, detail = "scoring cells")
-        rv$cells <- ecoeval::score_cells(rv$pairs, rv$ai, rv$gold, use,
-                                         judge = NULL, cache = rv$judge_cache,
-                                         overrides = rv$overrides)
       })
+      if (inherits(res, "error")) {
+        status(conditionMessage(res))
+        showNotification(conditionMessage(res), type = "error", duration = NULL)
+        return(invisible(NULL))
+      }
 
-      rv$comparators <- cfg
-      rv$blocked <- NULL
-      rv$current_paper <- rv$scope$papers[[1L]]
-      rv$dirty <- rv$dirty + 1L
+      apply_scored(rv, res, cfg)
       status(sprintf("%d records aligned into %d rows.",
                      nrow(rv$ai) + nrow(rv$gold), nrow(rv$pairs)))
       rv$stage <- "dashboard"
