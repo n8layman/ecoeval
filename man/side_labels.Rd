@@ -4,7 +4,7 @@
 \alias{side_labels}
 \title{Names for the two sides of a comparison}
 \usage{
-side_labels(ai = "AI", gold = "Gold standard", neutral = FALSE)
+side_labels(ai = "Extraction", gold = "Reference", neutral = FALSE)
 }
 \arguments{
 \item{ai}{What to call the extraction side.}
@@ -26,5 +26,6 @@ with \code{\link[=use_side_labels]{use_side_labels()}}.
 }
 \examples{
 side_labels()
-side_labels("Extraction", "Reference", neutral = TRUE)
+side_labels("AI", "Gold standard")
+side_labels("Parser v2", "Parser v1", neutral = TRUE)
 }

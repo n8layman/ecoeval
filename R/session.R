@@ -155,7 +155,7 @@ normalise_run_config <- function(cfg) {
                                 function(v) as.character(unlist(v))[[1L]])
   if (length(cfg$side_labels)) {
     sl <- lapply(cfg$side_labels, function(v) unlist(v)[[1L]])
-    cfg$side_labels <- side_labels(sl$ai %||% "AI", sl$gold %||% "Gold standard",
+    cfg$side_labels <- side_labels(sl$ai %||% "Extraction", sl$gold %||% "Reference",
                                    isTRUE(as.logical(sl$neutral)))
   } else {
     cfg$side_labels <- NULL

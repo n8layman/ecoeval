@@ -1,9 +1,11 @@
 # What the two sides are called.
 #
-# "AI" and "gold standard" are the defaults, not the only case. The extraction
-# may be a rules-based parser or an earlier pipeline version, and the reference
-# may be an independently filed record that can itself be wrong -- calling that
-# side "gold" tells a reviewer it is correct when it is only a second source.
+# "Extraction" and "Reference" are the defaults because they claim no more than
+# they know: the extraction may be a rules-based parser or an earlier pipeline
+# version rather than an AI, and the reference may be an independently filed
+# record that can itself be wrong -- calling that side "gold" tells a reviewer
+# it is correct when it is only a second source. Name the sides for what they
+# are when that is known.
 #
 # The labels are wording only. Scoring is unchanged: the accounting still
 # treats the reference as the side the extraction is measured against, which
@@ -27,9 +29,10 @@
 #' @return An `ecoeval_labels` object.
 #' @examples
 #' side_labels()
-#' side_labels("Extraction", "Reference", neutral = TRUE)
+#' side_labels("AI", "Gold standard")
+#' side_labels("Parser v2", "Parser v1", neutral = TRUE)
 #' @export
-side_labels <- function(ai = "AI", gold = "Gold standard", neutral = FALSE) {
+side_labels <- function(ai = "Extraction", gold = "Reference", neutral = FALSE) {
   for (x in list(ai, gold)) {
     if (!is.character(x) || length(x) != 1L || is.na(x) || !nzchar(x)) {
       eco_abort("Side labels are single, non-empty strings.")
@@ -62,7 +65,7 @@ as_side_labels <- function(x) {
   if (is.null(names(x)) || length(bad)) {
     eco_abort("`labels` is side_labels(), or c(ai = \"...\", gold = \"...\").")
   }
-  side_labels(ai = x$ai %||% "AI", gold = x$gold %||% "Gold standard",
+  side_labels(ai = x$ai %||% "Extraction", gold = x$gold %||% "Reference",
               neutral = isTRUE(as.logical(x$neutral %||% FALSE)))
 }
 
@@ -108,7 +111,7 @@ cm_tag <- function(labels, tag) if (labels$neutral) "" else paste0(" (", tag, ")
 #' @param labels Side labels; see [side_labels()].
 #' @return A character vector the same length.
 #' @examples
-#' record_kind_label(c("matched", "gold only"), side_labels(gold = "Reference"))
+#' record_kind_label(c("matched", "gold only"), side_labels(gold = "Gold standard"))
 #' @export
 record_kind_label <- function(kind, labels = current_labels()) {
   labels <- as_side_labels(labels)

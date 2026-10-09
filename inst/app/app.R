@@ -146,11 +146,7 @@ server <- function(input, output, session) {
 
   output$subtitle <- renderText({
     l <- lab()
-    if (identical(unclass(l), unclass(ecoeval::side_labels()))) {
-      "How accurately did the AI extraction perform against the gold standard?"
-    } else {
-      sprintf("How closely does %s agree with %s?", l$ai, l$gold)
-    }
+    sprintf("How closely does %s agree with %s?", l$ai, l$gold)
   })
 
   output$scope_box <- renderUI({

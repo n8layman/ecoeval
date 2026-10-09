@@ -56,6 +56,13 @@
   `document_passages()` do the work, and the fixture database now carries
   synthetic OCR text.
 
+## Default side names
+
+* The two sides are now called **Extraction** and **Reference** by default,
+  rather than "AI" and "Gold standard": the extraction need not be an AI, and
+  the reference need not be right. `side_labels(ai = "AI", gold = "Gold
+  standard")` restores the old names.
+
 ## Fixes
 
 * The interactive record heatmap's legend shows the outcome labels -- and so
