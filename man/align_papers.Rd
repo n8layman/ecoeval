@@ -4,13 +4,7 @@
 \alias{align_papers}
 \title{Align the two paper lists}
 \usage{
-align_papers(
-  ai_papers,
-  gold_papers,
-  fields,
-  min_posterior = 0.85,
-  seed = ecoeval_seed()
-)
+align_papers(ai_papers, gold_papers, fields, min_posterior = 0.85)
 }
 \arguments{
 \item{ai_papers, gold_papers}{Tibbles of paper metadata, each with a \code{.paper}
@@ -20,8 +14,6 @@ identifier column.}
 
 \item{min_posterior}{Links below this confidence are returned with
 \code{accepted = FALSE} for the human to confirm.}
-
-\item{seed}{Seed for the matcher; see \code{\link[=ecoeval_seed]{ecoeval_seed()}}.}
 }
 \value{
 A tibble with \code{ai_paper}, \code{gold_paper}, \code{posterior}, \code{matcher},
@@ -31,4 +23,6 @@ A tibble with \code{ai_paper}, \code{gold_paper}, \code{posterior}, \code{matche
 Paper alignment determines scope, not score. Its asymmetry is worth knowing:
 a missed paper match just shrinks the evaluation set, but a wrong paper
 match compares one paper's records against another's and produces garbage.
+So every paper is offered its most likely partner, and only the confident
+links are accepted without a human looking.
 }

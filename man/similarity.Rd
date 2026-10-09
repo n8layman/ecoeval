@@ -9,8 +9,9 @@ similarity(a, b, method = "jw")
 \arguments{
 \item{a, b}{Character vectors, recycled against each other.}
 
-\item{method}{A \code{stringdist} method. Jaro-Winkler by default, matching what
-fastLink uses internally so thresholds read consistently across the app.}
+\item{method}{A \code{stringdist} method. Jaro-Winkler by default, which is also
+what the record matcher scores identity columns with, so thresholds read
+consistently across the app.}
 }
 \value{
 A numeric vector of similarities; \code{NA} where either side is blank.

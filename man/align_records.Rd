@@ -11,7 +11,7 @@ align_records(
   paper_map = NULL,
   rejected = NULL,
   added = NULL,
-  seed = ecoeval_seed()
+  min_posterior = 0.5
 )
 }
 \arguments{
@@ -22,13 +22,16 @@ align_records(
 \item{paper_map}{A tibble with \code{ai_paper} and \code{gold_paper} defining scope.
 When \code{NULL}, papers are matched on identical \code{.paper} values.}
 
-\item{rejected}{A tibble of human-rejected links with \code{ai_rid}, \code{gold_rid}.}
+\item{rejected}{A tibble of human-rejected links with \code{ai_rid}, \code{gold_rid}.
+A rejected pair is never linked; either record may still pair with
+another.}
 
 \item{added}{A tibble of human-added links with \code{ai_rid}, \code{gold_rid}. These
 win over any automatic link that conflicts with them.}
 
-\item{seed}{Seed for the matcher; see \code{\link[=ecoeval_seed]{ecoeval_seed()}}. Pinned by default so
-two runs of the same configuration produce the same pairings.}
+\item{min_posterior}{The probability of being the same record a pair needs
+to be linked. The default, 0.5, links a pair when that is more likely
+than not.}
 }
 \value{
 A tibble with \code{pair_id}, \code{paper}, \code{ai_rid}, \code{gold_rid}, \code{posterior},
@@ -36,6 +39,10 @@ A tibble with \code{pair_id}, \code{paper}, \code{ai_rid}, \code{gold_rid}, \cod
 ordered pairs first, then AI-only, then gold-only.
 }
 \description{
-Blocked per paper, 1:1, permissive. Every record from both sides appears in
-the result: some rows are pairs, some are AI-only, some are gold-only.
+Blocked per paper and 1:1. A pair is linked only when the linkage model
+(see \code{\link[=fit_linkage_model]{fit_linkage_model()}}) puts the chance that the two rows are the same
+record at \code{min_posterior} or more; everything else stays unpaired, as the
+record one side has and the other does not. Every record from both sides
+appears in the result: some rows are pairs, some are AI-only, some are
+gold-only.
 }

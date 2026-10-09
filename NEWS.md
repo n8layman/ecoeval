@@ -63,6 +63,29 @@
   the reference need not be right. `side_labels(ai = "AI", gold = "Gold
   standard")` restores the old names.
 
+## Record linkage
+
+* **Records with no counterpart are no longer forced into a pair.** The
+  matcher used to pair every leftover record in a paper with whatever was free
+  on the other side, so a gold row the extraction missed was shown as a
+  disagreement with some unrelated AI row, and an all-gold row never appeared.
+  `align_records()` now links a pair only when the linkage model puts the
+  chance it is the same record at `min_posterior` (0.5) or more; the rest are
+  AI-only and gold-only rows.
+* **Setup is much faster.** fastLink was called once per paper, at most of a
+  second each in fixed overhead, so setup took minutes on a few hundred
+  papers. The matcher is now ecoeval's own Fellegi-Sunter model, fitted once
+  and applied to every within-paper pair together: 200 papers align in well
+  under a second. fastLink is no longer a dependency.
+* Fix: applying fastLink's fitted model to a block looked its agreement
+  probabilities up by the order the levels appeared in that block, so in some
+  papers identical records scored near zero and the wrong rows were paired.
+* `fit_linkage_model()` returns the model, with a print method showing what
+  agreement on each identity column is worth. `ecoeval_seed()` is gone: the
+  matcher is deterministic.
+* A rejected link no longer keeps both records unpaired: either may pair with
+  another record the model links it to.
+
 ## Fixes
 
 * The interactive record heatmap's legend shows the outcome labels -- and so

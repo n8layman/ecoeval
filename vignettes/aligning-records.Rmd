@@ -129,16 +129,27 @@ into `run_config.json`.
 
 ## The matcher
 
-fastLink, blocked per paper, **permissive — no similarity floor**. It proposes
-pairings even when key identifiers disagree, and the human judges. Dropping a
-pair because the identifiers look wrong is precisely the decision the human
-should be making with the values in front of them.
+Blocked per paper, 1:1, and **linked only when the model thinks it more likely
+than not**. Gold standards hold rows the extraction missed, and extractions hold
+rows the gold standard does not. Pairing a leftover gold row with whatever AI
+row is free in the same paper would hide a missed record inside a
+"disagreement", so a pair is linked only when its identity columns make that
+case. What the matcher leaves apart, you can link by hand; what it joins wrongly,
+you can reject.
 
-There is one wrinkle worth knowing about. fastLink's EM learns which fields
-discriminate *from the data it is given* — and a per-paper block holds a handful
-of records. On two records it will confidently pair the wrong ones. So ecoeval
-fits the model **once over every scoped record** and then applies it per paper:
-pooled estimation, blocked application.
+Each identity column of a candidate pair is scored *agree*, *close*, or
+*differ* by string similarity, and a Fellegi-Sunter model says how much each
+outcome counts for or against the two rows being the same record. Agreeing on
+a species binomial is strong evidence, because two different records rarely
+share one by chance; agreeing on an interaction type with four possible values
+is weak evidence, because they often do.
+
+A paper holds a handful of records — far too few to learn that from — so the
+model is fitted **once over every scoped record** and applied per paper. How
+often two different records agree by chance is learned from pairs in
+*different* papers, which certainly are not the same record. How often the same
+record agrees with itself is learned from the within-paper pairs, held near a
+prior so that a small corpus cannot talk the model into nonsense.
 
 ```{r}
 config  <- default_comparator_config(schema)
@@ -146,15 +157,14 @@ linkage <- config$field[config$linkage]
 linkage
 
 paper_map <- tibble::tibble(ai_paper = scope$papers, gold_paper = scope$papers)
+fit_linkage_model(ai, gold, linkage, paper_map)
+
 pairs <- align_records(ai, gold, linkage, paper_map)
 table(pairs$kind)
 ```
 
-fastLink also clusters string distances internally, and that clustering is
-randomly initialised — two identical calls could otherwise return different
-pairings. ecoeval pins the seed (see `ecoeval_seed()`), restoring the caller's
-RNG state afterwards, so a run is reproducible without disturbing anything else
-in your session.
+`min_posterior` on `align_records()` sets how sure a link must be; the default
+is 0.5.
 
 **Matching is 1:1.** Leftovers on either side are false positives and false
 negatives, because that is what they are. An extra AI record *is* a false

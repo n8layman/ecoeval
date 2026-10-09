@@ -1,155 +1,72 @@
 # Record and paper alignment.
 #
-# fastLink is the matcher, not the reporter: we use the linkage algorithm and
-# the per-link posterior probabilities that drive sort-by-confidence in review,
-# and we do not surface its diagnostics. Blocking is per paper, and the matcher
-# is deliberately permissive -- no similarity floor -- because dropping a pair
-# because the identifiers look wrong is precisely the decision the human should
-# be making with the values in front of them.
+# A Fellegi-Sunter matcher, blocked per paper. Each identity column of a
+# candidate pair is scored agree / close / differ by string similarity, and the
+# model says how much each outcome on each column counts for or against the two
+# rows being the same record. A pair is linked only when the model thinks that
+# more likely than not. Gold standards hold rows the extraction missed, and
+# extractions hold rows the gold standard does not: pairing those with
+# whatever else is left in the paper would hide a missed or extra record inside
+# a "disagreement". What the model leaves apart, the human can link; what it
+# joins wrongly, the human can reject.
+#
+# The model is fitted once over every in-scope record, and its two halves are
+# learned from different pairs because each is learnable from different data:
+#
+# * how often two *different* records agree by chance (u) -- from pairs in
+#   different papers, which are certainly not the same record;
+# * how often the *same* record agrees with itself (m), and how many of the
+#   within-paper pairs are the same record -- by EM over the within-paper
+#   pairs, held near a prior so that a small corpus cannot talk the model into
+#   nonsense. A paper holds a handful of records, far too few to learn from on
+#   its own, so the model is pooled and applied per paper.
+#
+# This replaces fastLink, which ecoeval used to call once per paper. Each call
+# cost most of a second in fixed overhead, and applying a fitted model to a
+# block looked its probabilities up by the order the agreement levels happened
+# to appear in that block, so a block whose first pair agreed was scored as if
+# it disagreed.
 
-#' Similarity matrix between two record sets
-#'
-#' Mean string similarity across the linkage fields, used to sort candidate
-#' pairs and as the fallback matcher when fastLink's EM cannot run.
-#'
-#' @param a,b Record tibbles.
-#' @param fields Linkage fields present in both.
-#' @return A numeric matrix, `nrow(a)` by `nrow(b)`.
+#' Agreement levels, in order of increasing evidence for a match
 #' @keywords internal
 #' @noRd
-pair_score_matrix <- function(a, b, fields) {
-  m <- matrix(0, nrow = nrow(a), ncol = nrow(b))
-  fields <- intersect(fields, intersect(names(a), names(b)))
-  if (!length(fields) || !nrow(a) || !nrow(b)) return(m)
-  for (f in fields) {
-    av <- vapply(seq_len(nrow(a)), function(i) as_scalar_chr(cell_value(a, i, f)), character(1))
-    bv <- vapply(seq_len(nrow(b)), function(i) as_scalar_chr(cell_value(b, i, f)), character(1))
-    s <- outer(av, bv, function(x, y) similarity(x, y))
-    s[is.na(s)] <- 0
-    m <- m + s
-  }
-  m / length(fields)
-}
+LINK_LEVELS <- c("differ", "close", "agree")
 
-#' Greedily take a 1:1 assignment from a score matrix
+#' Similarity at or above which two values are close, and agree
 #'
-#' Matching is 1:1 and leftovers are false positives and false negatives,
-#' because that is what they are. Greedy on descending score; ties resolve by
-#' row order, which keeps the result deterministic.
-#'
-#' @param m A score matrix.
-#' @param floor_score Minimum score to propose a pair. Zero by default -- the
-#'   matcher proposes even when identifiers disagree, and the human judges.
-#' @return A tibble with `i`, `j`, `score`.
+#' On the same scale as [similarity()], with the cut points fastLink uses.
 #' @keywords internal
 #' @noRd
-greedy_assign <- function(m, floor_score = 0) {
-  out <- list()
-  if (!length(m)) return(empty_tbl(i = integer(), j = integer(), score = numeric()))
-  used_i <- logical(nrow(m))
-  used_j <- logical(ncol(m))
-  ord <- order(-as.vector(m), seq_along(m))
-  for (idx in ord) {
-    i <- ((idx - 1L) %% nrow(m)) + 1L
-    j <- ((idx - 1L) %/% nrow(m)) + 1L
-    if (used_i[i] || used_j[j]) next
-    if (m[i, j] < floor_score) next
-    used_i[i] <- TRUE
-    used_j[j] <- TRUE
-    out[[length(out) + 1L]] <- c(i = i, j = j, score = m[i, j])
-    if (all(used_i) || all(used_j)) break
-  }
-  if (!length(out)) return(empty_tbl(i = integer(), j = integer(), score = numeric()))
-  d <- as.data.frame(do.call(rbind, out))
-  tibble::tibble(i = as.integer(d$i), j = as.integer(d$j), score = as.numeric(d$score))
-}
+LINK_CUTS <- c(close = 0.88, agree = 0.94)
 
-#' The seed the matcher runs under
+#' Prior beliefs, each worth `LINK_PRIOR_WEIGHT` pairs of evidence
 #'
-#' fastLink clusters string-distance values internally, and that clustering is
-#' randomly initialised -- so two identical calls can return different
-#' pairings. A run that cannot be reproduced is not much use as evidence, and
-#' `run_config.json` promises exactly that reproducibility, so ecoeval pins the
-#' seed for every call into fastLink.
-#'
-#' Set `options(ecoeval.seed = )` to change it.
-#'
-#' @return An integer seed.
-#' @export
-ecoeval_seed <- function() {
-  as.integer(getOption("ecoeval.seed", 20250831L))
-}
-
-#' Evaluate an expression under a fixed seed, leaving the caller's RNG alone
-#'
-#' Seeding globally would silently change the results of anything else the user
-#' is doing in the same session, so the previous RNG state is put back.
-#'
-#' @param seed Integer seed.
-#' @param f A function of no arguments.
-#' @return The value of `f()`.
+#' The same record mostly agrees with itself on its identity columns; two
+#' different records mostly do not. The data moves these as soon as there is
+#' enough of it.
 #' @keywords internal
 #' @noRd
-with_local_seed <- function(seed, f) {
-  has_seed <- exists(".Random.seed", envir = globalenv(), inherits = FALSE)
-  if (has_seed) {
-    old <- get(".Random.seed", envir = globalenv(), inherits = FALSE)
-    on.exit(assign(".Random.seed", old, envir = globalenv()), add = TRUE)
-  } else {
-    on.exit(suppressWarnings(rm(".Random.seed", envir = globalenv())), add = TRUE)
-  }
-  set.seed(seed)
-  f()
-}
+LINK_M_PRIOR <- c(differ = 0.05, close = 0.10, agree = 0.85)
+LINK_U_PRIOR <- c(differ = 0.85, close = 0.05, agree = 0.10)
+LINK_PRIOR_WEIGHT <- 10
 
-#' Fit the linkage model once over the whole corpus
+#' The agreement level of each pair of values
 #'
-#' fastLink's EM learns which fields discriminate from the data it is given.
-#' Per-paper blocks hold a handful of records each -- far too few for that, and
-#' on two records the EM will confidently pair the wrong ones. Fitting once
-#' over every scoped record and then *applying* that model per paper is the
-#' correct division of labour: pooled estimation, blocked application.
-#'
-#' @param ai,gold Record tibbles.
-#' @param fields Linkage fields.
-#' @param seed Seed for fastLink's internal clustering; see [ecoeval_seed()].
-#' @return A `fastLink.EM` object, or `NULL` when the model cannot be fit --
-#'   in which case the similarity matcher takes over.
-#' @export
-fit_linkage_model <- function(ai, gold, fields, seed = ecoeval_seed()) {
-  fields <- intersect(fields, intersect(names(ai), names(gold)))
-  if (!length(fields) || nrow(ai) < 2L || nrow(gold) < 2L) return(NULL)
-  dfa <- linkage_frame(ai, fields)
-  dfb <- linkage_frame(gold, fields)
-  with_local_seed(seed, function() {
-    quietly(function() {
-      tryCatch(
-        fastLink::fastLink(
-          dfA = dfa, dfB = dfb, varnames = fields,
-          stringdist.match = fields,
-          estimate.only = TRUE, verbose = FALSE, n.cores = 1L
-        ),
-        error = function(e) NULL
-      )
-    })
-  })
-}
-
-#' Run an expression with fastLink's console chatter suppressed
-#'
-#' fastLink reports progress with `cat()`, which `suppressMessages()` does not
-#' catch and which would otherwise flood a Shiny console on every paper.
-#'
-#' @param f A function of no arguments.
-#' @return The value of `f()`.
+#' @param a,b Character vectors of the same length; `NA` is missing.
+#' @return An integer vector indexing [LINK_LEVELS], `NA` where either value
+#'   is missing -- a missing value is no evidence either way.
 #' @keywords internal
 #' @noRd
-quietly <- function(f) {
-  out <- NULL
-  utils::capture.output(
-    suppressWarnings(suppressMessages(out <- f())),
-    file = nullfile()
-  )
+agreement_level <- function(a, b) {
+  out <- rep(NA_integer_, length(a))
+  ok <- !is.na(a) & !is.na(b)
+  if (!any(ok)) return(out)
+  # Records repeat their identity values; score each distinct pair once.
+  key <- paste(a[ok], b[ok], sep = "\r")
+  first <- !duplicated(key)
+  s <- similarity(a[ok][first], b[ok][first])
+  lvl <- 1L + (s >= LINK_CUTS[["close"]]) + (s >= LINK_CUTS[["agree"]])
+  out[ok] <- as.integer(lvl[match(key, key[first])])
   out
 }
 
@@ -157,7 +74,7 @@ quietly <- function(f) {
 #'
 #' @param df A record tibble.
 #' @param fields Linkage fields.
-#' @return A base data frame of character columns.
+#' @return A base data frame of character columns, `NA` where blank.
 #' @keywords internal
 #' @noRd
 linkage_frame <- function(df, fields) {
@@ -174,105 +91,275 @@ linkage_frame <- function(df, fields) {
   out
 }
 
-#' Link two record sets within one block
+#' Every within-paper pair of records
 #'
-#' Applies the pooled model to a single paper. fastLink's EM needs enough
-#' records and enough variation to converge; when no model could be fit, or
-#' when applying it to this block fails, the similarity matcher does the work
-#' instead. That is not an error condition -- it is the cheap matcher earning
-#' its keep on a two-row paper.
-#'
-#' @param a,b Record tibbles for a single block.
-#' @param fields Linkage fields.
-#' @param em A model from [fit_linkage_model()], or `NULL`.
-#' @param seed Seed for fastLink's internal clustering.
-#' @return A tibble with `i`, `j`, `posterior`, `matcher`.
+#' @param ai,gold Record tibbles with `.paper`.
+#' @param paper_map A tibble with `ai_paper` and `gold_paper`.
+#' @return A data frame with `block` (the `paper_map` row), `i`, and `j` (rows
+#'   of `ai` and `gold`).
 #' @keywords internal
 #' @noRd
-link_block <- function(a, b, fields, em = NULL, seed = ecoeval_seed()) {
-  fields <- intersect(fields, intersect(names(a), names(b)))
-  scores <- pair_score_matrix(a, b, fields)
-  fallback <- function() {
-    g <- greedy_assign(scores)
-    g$posterior <- g$score
-    g$matcher <- "similarity"
-    g[, c("i", "j", "posterior", "matcher")]
-  }
-  if (!length(fields) || is.null(em) || !nrow(a) || !nrow(b)) return(fallback())
-
-  dfa <- linkage_frame(a, fields)
-  dfb <- linkage_frame(b, fields)
-  out <- with_local_seed(seed, function() {
-    quietly(function() {
-      tryCatch(
-        fastLink::fastLink(
-          dfA = dfa, dfB = dfb, varnames = fields,
-          stringdist.match = fields, em.obj = em,
-          # No similarity floor: propose everything, let the human judge.
-          threshold.match = 1e-6,
-          dedupe.matches = TRUE, verbose = FALSE, n.cores = 1L
-        ),
-        error = function(e) NULL
-      )
-    })
+candidate_pairs <- function(ai, gold, paper_map) {
+  ai_rows <- split(seq_len(nrow(ai)), ai$.paper)
+  gold_rows <- split(seq_len(nrow(gold)), gold$.paper)
+  blocks <- lapply(seq_len(nrow(paper_map)), function(p) {
+    a <- paper_map$ai_paper[[p]]
+    b <- paper_map$gold_paper[[p]]
+    if (is.na(a) || is.na(b)) return(NULL)
+    i <- ai_rows[[a]]
+    j <- gold_rows[[b]]
+    if (!length(i) || !length(j)) return(NULL)
+    data.frame(block = p, i = rep(i, times = length(j)),
+               j = rep(j, each = length(i)))
   })
-  # fastLink returns an empty list rather than a zero-row frame when the model
-  # likes nothing in this block, so check the shape before reading it.
-  if (is.null(out) || !is.data.frame(out$matches) || !nrow(out$matches)) {
-    return(fallback())
-  }
-
-  res <- tibble::tibble(
-    i = as.integer(out$matches$inds.a),
-    j = as.integer(out$matches$inds.b),
-    posterior = as.numeric(out$posterior %||% rep(NA_real_, nrow(out$matches))),
-    matcher = "fastLink"
-  )
-  res <- enforce_one_to_one(res)
-
-  # fastLink stops at the pairs its model likes; sweep up the rest greedily so
-  # every record gets a proposal to accept or reject.
-  left_i <- setdiff(seq_len(nrow(a)), res$i)
-  left_j <- setdiff(seq_len(nrow(b)), res$j)
-  if (length(left_i) && length(left_j)) {
-    sub <- greedy_assign(scores[left_i, left_j, drop = FALSE])
-    if (nrow(sub)) {
-      res <- dplyr::bind_rows(res, tibble::tibble(
-        i = left_i[sub$i], j = left_j[sub$j],
-        posterior = sub$score, matcher = "similarity"
-      ))
-    }
-  }
-  res
+  blocks <- blocks[!vapply(blocks, is.null, logical(1))]
+  if (!length(blocks)) return(data.frame(block = integer(), i = integer(), j = integer()))
+  do.call(rbind, blocks)
 }
 
-#' Drop links that would make the assignment many-to-one
+#' How often two record sets agree on a field by chance, over all pairs
 #'
-#' @param res A tibble with `i`, `j`, `posterior`.
-#' @return `res` reduced to a 1:1 assignment, highest posterior kept.
+#' Counted over distinct values rather than pairs of records, so the cost is
+#' the number of distinct values squared, not the number of records. Past
+#' `max_values` distinct values on a side, an evenly spaced subset estimates
+#' the proportions.
+#'
+#' @param a,b Character vectors of one field's values; `NA` is missing.
+#' @return Counts by level, scaled to all non-missing pairs.
 #' @keywords internal
 #' @noRd
-enforce_one_to_one <- function(res) {
-  if (!nrow(res)) return(res)
-  res <- res[order(-dplyr::coalesce(res$posterior, 0)), , drop = FALSE]
-  keep <- !duplicated(res$i) & !duplicated(res$j)
-  res[keep, , drop = FALSE]
+chance_agreement <- function(a, b, max_values = 2000L) {
+  ta <- table(a[!is.na(a)])
+  tb <- table(b[!is.na(b)])
+  out <- stats::setNames(numeric(length(LINK_LEVELS)), LINK_LEVELS)
+  if (!length(ta) || !length(tb)) return(out)
+  thin <- function(t) {
+    if (length(t) <= max_values) return(t)
+    t[unique(round(seq(1, length(t), length.out = max_values)))]
+  }
+  sa <- thin(ta)
+  sb <- thin(tb)
+  s <- 1 - stringdist::stringdistmatrix(canonicalise(names(sa)),
+                                        canonicalise(names(sb)), method = "jw")
+  lvl <- 1L + (s >= LINK_CUTS[["close"]]) + (s >= LINK_CUTS[["agree"]])
+  w <- outer(as.numeric(sa), as.numeric(sb))
+  share <- vapply(seq_along(LINK_LEVELS), function(l) sum(w[lvl == l]), numeric(1))
+  out[] <- share / sum(w) * sum(ta) * sum(tb)
+  out
+}
+
+#' A pair's log odds of being the same record
+#'
+#' @param G An integer matrix of agreement levels, one column per field.
+#' @param model An `ecoeval_linkage_model`.
+#' @return A numeric vector, one per row of `G`.
+#' @keywords internal
+#' @noRd
+match_log_odds <- function(G, model) {
+  lo <- rep(stats::qlogis(model$lambda), nrow(G))
+  for (k in seq_along(model$fields)) {
+    w <- log(model$m[[k]]) - log(model$u[[k]])
+    g <- G[, k]
+    ok <- !is.na(g)
+    lo[ok] <- lo[ok] + w[g[ok]]
+  }
+  lo
+}
+
+#' Estimate the linkage model from the candidate pairs
+#'
+#' @param av,bv Linkage frames of every in-scope record on each side.
+#' @param G Agreement levels of the candidate pairs.
+#' @param cand The candidate pairs.
+#' @return An `ecoeval_linkage_model`.
+#' @keywords internal
+#' @noRd
+estimate_linkage_model <- function(av, bv, G, cand, max_iter = 500L) {
+  fields <- names(av)
+  K <- length(fields)
+  prior_m <- LINK_PRIOR_WEIGHT * LINK_M_PRIOR
+  prior_u <- LINK_PRIOR_WEIGHT * LINK_U_PRIOR
+
+  # u: chance agreement among pairs that cannot be the same record. With too
+  # few of those -- one paper, or paper alignment, where everything is one
+  # block -- u is learned by the EM along with m instead.
+  learn_u <- logical(K)
+  u <- lapply(seq_len(K), function(k) {
+    all_pairs <- chance_agreement(av[[k]], bv[[k]])
+    within <- tabulate(G[, k], nbins = length(LINK_LEVELS))
+    across <- pmax(all_pairs - within, 0)
+    if (sum(across) < sum(within)) {
+      learn_u[[k]] <<- TRUE
+      across <- all_pairs
+    }
+    stats::setNames((across + prior_u) / (sum(across) + LINK_PRIOR_WEIGHT), LINK_LEVELS)
+  })
+
+  # EM over the distinct agreement patterns, weighted by how often each occurs.
+  code <- as.vector(ifelse(is.na(G), 0L, G) %*% (4^(seq_len(K) - 1L)))
+  first <- !duplicated(code)
+  P <- G[first, , drop = FALSE]
+  n <- tabulate(match(code, code[first]), nbins = sum(first))
+
+  # Start from every record that could have a partner having one.
+  per_block <- split(cand, cand$block)
+  could <- sum(vapply(per_block, function(b) {
+    min(length(unique(b$i)), length(unique(b$j)))
+  }, numeric(1)))
+  clamp <- function(x) min(max(x, 1e-4), 1 - 1e-4)
+  model <- structure(
+    list(fields = fields,
+         m = rep(list(stats::setNames(LINK_M_PRIOR, LINK_LEVELS)), K),
+         u = u, lambda = clamp(could / nrow(cand)), n_pairs = nrow(cand)),
+    class = "ecoeval_linkage_model"
+  )
+  level_sums <- function(w, k) {
+    vapply(seq_along(LINK_LEVELS), function(l) sum(w[which(P[, k] == l)]), numeric(1))
+  }
+  for (iter in seq_len(max_iter)) {
+    z <- stats::plogis(match_log_odds(P, model)) * n
+    m <- lapply(seq_len(K), function(k) {
+      w <- level_sums(z, k)
+      stats::setNames((w + prior_m) / (sum(w) + LINK_PRIOR_WEIGHT), LINK_LEVELS)
+    })
+    u <- lapply(seq_len(K), function(k) {
+      if (!learn_u[[k]]) return(model$u[[k]])
+      w <- level_sums(n - z, k)
+      stats::setNames((w + prior_u) / (sum(w) + LINK_PRIOR_WEIGHT), LINK_LEVELS)
+    })
+    lambda <- clamp(sum(z) / sum(n))
+    change <- max(abs(lambda - model$lambda), abs(unlist(m) - unlist(model$m)),
+                  abs(unlist(u) - unlist(model$u)))
+    model$m <- m
+    model$u <- u
+    model$lambda <- lambda
+    if (change < 1e-8) break
+  }
+  names(model$m) <- names(model$u) <- fields
+  model
+}
+
+#' Score candidate pairs with a pooled linkage model
+#'
+#' @param a,b Record tibbles; `cand` indexes their rows.
+#' @param fields Linkage fields.
+#' @param cand Candidate pairs from [candidate_pairs()].
+#' @return `cand` with `posterior`, the probability each pair is the same
+#'   record (`NA` when there was nothing to link on), and the model as the
+#'   `"model"` attribute.
+#' @keywords internal
+#' @noRd
+score_candidates <- function(a, b, fields, cand) {
+  fields <- intersect(fields, intersect(names(a), names(b)))
+  cand$posterior <- rep(NA_real_, nrow(cand))
+  if (!length(fields) || !nrow(cand)) return(cand)
+  av <- linkage_frame(a, fields)
+  bv <- linkage_frame(b, fields)
+  G <- matrix(
+    unlist(lapply(fields, function(f) agreement_level(av[[f]][cand$i], bv[[f]][cand$j]))),
+    nrow = nrow(cand), dimnames = list(NULL, fields)
+  )
+  model <- estimate_linkage_model(av, bv, G, cand)
+  cand$posterior <- stats::plogis(match_log_odds(G, model))
+  attr(cand, "model") <- model
+  cand
+}
+
+#' Fit the record linkage model
+#'
+#' The model [align_records()] links with, for inspecting what it learned: for
+#' each identity column, how strongly agreeing on it -- or not -- counts
+#' towards two rows being the same record.
+#'
+#' @param ai,gold Record tibbles with `.paper`.
+#' @param fields Linkage fields.
+#' @param paper_map Which papers' records may pair; as in [align_records()].
+#' @return An `ecoeval_linkage_model`: per-field agreement probabilities for
+#'   the same record (`m`) and for different records (`u`), and `lambda`, the
+#'   share of within-paper pairs that are the same record. `NULL` when there
+#'   is nothing to link on.
+#' @examples
+#' ai <- tibble::tibble(.paper = c("P1", "P1", "P2"),
+#'                      sp = c("Myotis lucifugus", "Eptesicus fuscus", "Lasiurus borealis"))
+#' gold <- tibble::tibble(.paper = c("P1", "P2", "P2"),
+#'                        sp = c("Myotis lucifigus", "Lasiurus borealis", "Lasiurus cinereus"))
+#' fit_linkage_model(ai, gold, "sp")
+#' @export
+fit_linkage_model <- function(ai, gold, fields, paper_map = NULL) {
+  paper_map <- paper_map %||% common_paper_map(ai, gold)
+  ai <- ai[ai$.paper %in% paper_map$ai_paper, , drop = FALSE]
+  gold <- gold[gold$.paper %in% paper_map$gold_paper, , drop = FALSE]
+  attr(score_candidates(ai, gold, fields, candidate_pairs(ai, gold, paper_map)), "model")
+}
+
+#' @export
+print.ecoeval_linkage_model <- function(x, ...) {
+  cat(sprintf("<linkage model> %d within-paper pairs, %.0f%% estimated to be the same record\n",
+              x$n_pairs, 100 * x$lambda))
+  w <- vapply(seq_along(x$fields), function(k) log(x$m[[k]]) - log(x$u[[k]]),
+              numeric(length(LINK_LEVELS)))
+  w <- matrix(w, ncol = length(x$fields), dimnames = list(LINK_LEVELS, x$fields))
+  cat("Evidence for a match (log odds) by agreement on each field:\n")
+  print(round(t(w), 2))
+  invisible(x)
+}
+
+#' Papers that share an identifier
+#' @keywords internal
+#' @noRd
+common_paper_map <- function(ai, gold) {
+  common <- intersect(unique(ai$.paper), unique(gold$.paper))
+  tibble::tibble(ai_paper = common, gold_paper = common)
+}
+
+#' Keep a 1:1 set of pairs, most probable first
+#'
+#' Greedy on descending posterior; ties resolve by row order, which keeps the
+#' result deterministic.
+#'
+#' @param links A data frame with `i`, `j`, `posterior`.
+#' @return `links` reduced to a 1:1 assignment, in order of posterior.
+#' @keywords internal
+#' @noRd
+one_to_one <- function(links) {
+  if (!nrow(links)) return(links)
+  links <- links[order(-dplyr::coalesce(links$posterior, -1), links$i, links$j), ,
+                 drop = FALSE]
+  used_i <- logical(max(links$i))
+  used_j <- logical(max(links$j))
+  keep <- logical(nrow(links))
+  for (r in seq_len(nrow(links))) {
+    i <- links$i[[r]]
+    j <- links$j[[r]]
+    if (used_i[[i]] || used_j[[j]]) next
+    used_i[[i]] <- TRUE
+    used_j[[j]] <- TRUE
+    keep[[r]] <- TRUE
+  }
+  links[keep, , drop = FALSE]
 }
 
 #' Align records between the two sources
 #'
-#' Blocked per paper, 1:1, permissive. Every record from both sides appears in
-#' the result: some rows are pairs, some are AI-only, some are gold-only.
+#' Blocked per paper and 1:1. A pair is linked only when the linkage model
+#' (see [fit_linkage_model()]) puts the chance that the two rows are the same
+#' record at `min_posterior` or more; everything else stays unpaired, as the
+#' record one side has and the other does not. Every record from both sides
+#' appears in the result: some rows are pairs, some are AI-only, some are
+#' gold-only.
 #'
 #' @param ai,gold Record tibbles with `.rid` and `.paper` columns.
 #' @param linkage_fields Character vector of fields to link on.
 #' @param paper_map A tibble with `ai_paper` and `gold_paper` defining scope.
 #'   When `NULL`, papers are matched on identical `.paper` values.
 #' @param rejected A tibble of human-rejected links with `ai_rid`, `gold_rid`.
+#'   A rejected pair is never linked; either record may still pair with
+#'   another.
 #' @param added A tibble of human-added links with `ai_rid`, `gold_rid`. These
 #'   win over any automatic link that conflicts with them.
-#' @param seed Seed for the matcher; see [ecoeval_seed()]. Pinned by default so
-#'   two runs of the same configuration produce the same pairings.
+#' @param min_posterior The probability of being the same record a pair needs
+#'   to be linked. The default, 0.5, links a pair when that is more likely
+#'   than not.
 #'
 #' @return A tibble with `pair_id`, `paper`, `ai_rid`, `gold_rid`, `posterior`,
 #'   `matcher`, and `link_source` (`"auto"`, `"manual"`, or `"unpaired"`),
@@ -280,36 +367,34 @@ enforce_one_to_one <- function(res) {
 #' @export
 align_records <- function(ai, gold, linkage_fields,
                           paper_map = NULL, rejected = NULL, added = NULL,
-                          seed = ecoeval_seed()) {
-  if (is.null(paper_map)) {
-    common <- intersect(unique(ai$.paper), unique(gold$.paper))
-    paper_map <- tibble::tibble(ai_paper = common, gold_paper = common)
-  }
+                          min_posterior = 0.5) {
+  paper_map <- paper_map %||% common_paper_map(ai, gold)
   if (!nrow(paper_map)) return(empty_pairs())
 
   in_ai <- ai[ai$.paper %in% paper_map$ai_paper, , drop = FALSE]
   in_gold <- gold[gold$.paper %in% paper_map$gold_paper, , drop = FALSE]
-  em <- fit_linkage_model(in_ai, in_gold, linkage_fields, seed)
+  cand <- score_candidates(in_ai, in_gold, linkage_fields,
+                           candidate_pairs(in_ai, in_gold, paper_map))
+  cand <- cand[!is.na(cand$posterior) & cand$posterior >= min_posterior, , drop = FALSE]
 
-  links <- list()
-  for (p in seq_len(nrow(paper_map))) {
-    a <- ai[ai$.paper == paper_map$ai_paper[[p]], , drop = FALSE]
-    b <- gold[gold$.paper == paper_map$gold_paper[[p]], , drop = FALSE]
-    if (!nrow(a) || !nrow(b)) next
-    res <- link_block(a, b, linkage_fields, em, seed)
-    if (!nrow(res)) next
-    links[[length(links) + 1L]] <- tibble::tibble(
-      paper = paper_map$ai_paper[[p]],
-      ai_rid = a$.rid[res$i],
-      gold_rid = b$.rid[res$j],
-      posterior = res$posterior,
-      matcher = res$matcher,
-      link_source = "auto"
-    )
-  }
-  links <- if (length(links)) dplyr::bind_rows(links) else empty_links()
-
+  links <- tibble::tibble(
+    i = cand$i, j = cand$j,
+    paper = paper_map$ai_paper[cand$block],
+    ai_rid = in_ai$.rid[cand$i],
+    gold_rid = in_gold$.rid[cand$j],
+    posterior = cand$posterior,
+    matcher = "model",
+    link_source = "auto"
+  )
+  # The human's decisions come before the 1:1 assignment, so a record freed
+  # by a rejection, or displaced by a manual link, can still find its partner.
   links <- drop_links(links, rejected)
+  if (!is.null(added) && nrow(added)) {
+    links <- links[!links$ai_rid %in% added$ai_rid &
+                     !links$gold_rid %in% added$gold_rid, , drop = FALSE]
+  }
+  links <- one_to_one(links)
+  links <- links[, names(empty_links()), drop = FALSE]
   links <- add_links(links, added, ai, gold)
 
   assemble_pairs(links, ai, gold, paper_map)
@@ -411,25 +496,24 @@ empty_pairs <- function() {
 #' Paper alignment determines scope, not score. Its asymmetry is worth knowing:
 #' a missed paper match just shrinks the evaluation set, but a wrong paper
 #' match compares one paper's records against another's and produces garbage.
+#' So every paper is offered its most likely partner, and only the confident
+#' links are accepted without a human looking.
 #'
 #' @param ai_papers,gold_papers Tibbles of paper metadata, each with a `.paper`
 #'   identifier column.
 #' @param fields Metadata fields to link on -- DOI, title, author, year.
 #' @param min_posterior Links below this confidence are returned with
 #'   `accepted = FALSE` for the human to confirm.
-#' @param seed Seed for the matcher; see [ecoeval_seed()].
 #'
 #' @return A tibble with `ai_paper`, `gold_paper`, `posterior`, `matcher`,
 #'   `accepted`.
 #' @export
-align_papers <- function(ai_papers, gold_papers, fields, min_posterior = 0.85,
-                         seed = ecoeval_seed()) {
-  fields <- intersect(fields, intersect(names(ai_papers), names(gold_papers)))
-  if (!nrow(ai_papers) || !nrow(gold_papers)) {
-    return(empty_tbl(ai_paper = character(), gold_paper = character(),
+align_papers <- function(ai_papers, gold_papers, fields, min_posterior = 0.85) {
+  empty <- empty_tbl(ai_paper = character(), gold_paper = character(),
                      posterior = numeric(), matcher = character(),
-                     accepted = logical()))
-  }
+                     accepted = logical())
+  fields <- intersect(fields, intersect(names(ai_papers), names(gold_papers)))
+  if (!nrow(ai_papers) || !nrow(gold_papers)) return(empty)
   if (!length(fields)) {
     # Nothing to link on but the identifiers themselves.
     common <- intersect(ai_papers$.paper, gold_papers$.paper)
@@ -437,18 +521,17 @@ align_papers <- function(ai_papers, gold_papers, fields, min_posterior = 0.85,
                           posterior = 1, matcher = "identifier",
                           accepted = TRUE))
   }
-  em <- fit_linkage_model(ai_papers, gold_papers, fields, seed)
-  res <- link_block(ai_papers, gold_papers, fields, em, seed)
-  if (!nrow(res)) {
-    return(empty_tbl(ai_paper = character(), gold_paper = character(),
-                     posterior = numeric(), matcher = character(),
-                     accepted = logical()))
-  }
+  na <- nrow(ai_papers)
+  nb <- nrow(gold_papers)
+  cand <- data.frame(block = 1L, i = rep(seq_len(na), times = nb),
+                     j = rep(seq_len(nb), each = na))
+  res <- one_to_one(score_candidates(ai_papers, gold_papers, fields, cand))
+  if (!nrow(res)) return(empty)
   tibble::tibble(
     ai_paper = ai_papers$.paper[res$i],
     gold_paper = gold_papers$.paper[res$j],
     posterior = res$posterior,
-    matcher = res$matcher,
+    matcher = "model",
     accepted = dplyr::coalesce(res$posterior, 0) >= min_posterior
   )
 }

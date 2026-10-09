@@ -28,7 +28,6 @@ Imports:
     htmlwidgets,
     ggplot2,
     plotly,
-    fastLink,
     DBI,
     RSQLite,
     dplyr,

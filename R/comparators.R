@@ -121,8 +121,9 @@ undecorate_date <- function(x) {
 #' String similarity, scaled to zero through one
 #'
 #' @param a,b Character vectors, recycled against each other.
-#' @param method A `stringdist` method. Jaro-Winkler by default, matching what
-#'   fastLink uses internally so thresholds read consistently across the app.
+#' @param method A `stringdist` method. Jaro-Winkler by default, which is also
+#'   what the record matcher scores identity columns with, so thresholds read
+#'   consistently across the app.
 #' @return A numeric vector of similarities; `NA` where either side is blank.
 #' @export
 similarity <- function(a, b, method = "jw") {

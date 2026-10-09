@@ -487,7 +487,7 @@ score_evaluation <- function(loaded, keys, config, paper_map,
   gold_shown <- prepare_records(loaded$gold_raw, keys$gold,
                                 stats::setNames(use$gold_col, use$field), prefix = "g")
 
-  # Normalisation is a pre-matching step: fastLink cannot see through
+  # Normalisation is a pre-matching step: the matcher cannot see through
   # "Myotis lucifugus" against "little brown bat", or a code against the
   # wording it stands for, and those are exactly the fields it depends on most.
   ai <- ai_shown
