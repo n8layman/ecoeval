@@ -53,5 +53,11 @@ state that drives both the grid colours and the metric accounting.
 \details{
 States: \code{agree}, \code{disagree}, \code{ai_missing} (paired, AI blank, gold has a
 value), \code{gold_missing} (paired, gold blank, AI has a value), \code{ai_only}
-(unpaired AI record), \code{gold_only} (unpaired gold record), \code{blank}.
+(unpaired AI record), \code{gold_only} (unpaired gold record), \code{blank} (paired,
+both blank), and \code{ai_only_blank} / \code{gold_only_blank} (an unpaired record
+that left this column empty).
+
+Two blanks agree only when the records were paired. A record with no partner
+has nothing to agree with, so its empty columns are not agreement: they
+colour as the one-sided record they belong to and count in no metric.
 }

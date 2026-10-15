@@ -18,7 +18,7 @@
 ecoeval_palette <- function() {
   c(
     green = "#2f9e5b", yellow = "#dfa60d", orange = "#a83a17",
-    purple = "#6f56b0", blank = "#e9ecef",
+    purple = "#6f56b0", grey = "#b9bfc7", blank = "#e9ecef",
     ai = "#2c7fb8", gold = "#7a5195", grid = "#d9dee3", ink = "#2f3640"
   )
 }
@@ -309,12 +309,15 @@ plot_paper_heatmap <- function(grid, max_papers = 60, labels = current_labels())
            sprintf("%s of cells agree", fmt_share(d$agreement))),
     ifelse(
       d$n_cells == 0L, "No records on either side",
-      sprintf("%d %s: %d agree, %d differ, %d %s, %d %s%s",
+      sprintf("%d %s: %d agree, %d differ, %d %s, %d %s%s%s",
               d$n_cells, ifelse(d$n_cells == 1L, "row", "rows"), d$n_agree,
               d$n_disagree, d$n_only_gold, side_only(labels, "gold"),
               d$n_only_ai, side_only(labels, "ai"),
               ifelse(d$n_blank > 0L,
-                     sprintf(", %d blank on both sides", d$n_blank), ""))
+                     sprintf(", %d blank on both sides", d$n_blank), ""),
+              ifelse(d$n_unpaired_blank > 0L,
+                     sprintf(", %d blank in an unmatched record",
+                             d$n_unpaired_blank), ""))
     ),
     sep = "\n"
   )
@@ -426,8 +429,8 @@ plot_record_heatmap <- function(grid, violations = character(0), focus = NULL,
   # would show through as "only_ai".
   shown <- outcome_labels(labels)
   fills <- stats::setNames(
-    unname(pal[c("green", "purple", "yellow", "orange")]),
-    shown[c("agree", "disagree", "only_gold", "only_ai")]
+    unname(pal[c("green", "purple", "yellow", "orange", "grey")]),
+    shown[c("agree", "disagree", "only_gold", "only_ai", "none")]
   )
   d$fill <- factor(unname(shown[as.character(d$outcome)]), levels = unname(shown))
 
@@ -459,7 +462,7 @@ plot_record_heatmap <- function(grid, violations = character(0), focus = NULL,
   }
   p +
     # limits, not just drop = FALSE: an outcome absent from this paper still
-    # belongs in the legend, so that four colours always mean four things.
+    # belongs in the legend, so that each colour always means the same thing.
     ggplot2::scale_fill_manual(values = fills, limits = names(fills),
                                drop = FALSE, name = NULL) +
     ggplot2::guides(fill = ggplot2::guide_legend(nrow = 2, byrow = TRUE)) +

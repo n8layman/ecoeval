@@ -11,7 +11,7 @@ cell_outcome(state)
 }
 \value{
 A character vector of outcomes: \code{agree}, \code{disagree}, \code{only_gold},
-\code{only_ai}.
+\code{only_ai}, \code{none}.
 }
 \description{
 Seven cell states, four things a person actually does something about: the
@@ -32,6 +32,12 @@ Colour is not the accounting. A both-blank cell is still a true negative in
 recall, because a field neither party filled in says nothing about
 extraction quality. The states are what the metrics are computed over; the
 outcomes are what the grid and the heatmap are coloured by.
+
+Both-blank is agreement only between paired records. An unpaired record's
+empty column (\code{ai_only_blank}, \code{gold_only_blank}) is a fifth outcome, \code{none}:
+one side has no record and the other has no value, so there was nothing to
+compare. It is shown grey, apart from the one-sided values a reader acts on,
+and like a both-blank cell it moves no number.
 }
 \examples{
 cell_outcome(c("agree", "blank", "ai_missing", "ai_only"))

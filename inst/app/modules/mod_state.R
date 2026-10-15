@@ -359,6 +359,12 @@ state_verdict <- function(state, labels = ecoeval::current_labels()) {
     blank = c("Neither side has a value",
               cost("true negative, dropped from the metrics",
                    "dropped from the metrics")),
+    ai_only_blank = c(paste(only("ai"), "record, blank here"),
+                      paste("no", labels$gold, "record to compare with;",
+                            "dropped from the metrics")),
+    gold_only_blank = c(paste(only("gold"), "record, blank here"),
+                        paste("no", labels$ai, "record to compare with;",
+                              "dropped from the metrics")),
     c(state, "")
   )
 }

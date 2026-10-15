@@ -149,3 +149,28 @@ test_that("an override cannot invent a pairing that does not exist", {
   row <- out[out$pair_id == orphan$pair_id & out$field == orphan$field, ]
   expect_equal(row$state, "ai_only")
 })
+
+test_that("an unpaired record's empty column is not agreement", {
+  pairs <- tibble::tibble(pair_id = c("p1", "p2"), paper = "x",
+                          ai_rid = c("a1", NA), gold_rid = c("g1", "g2"))
+  ai <- tibble::tibble(.rid = "a1", .paper = "x", species = "M. lucifugus", notes = NA)
+  gold <- tibble::tibble(.rid = c("g1", "g2"), .paper = "x",
+                         species = c("M. lucifugus", "E. fuscus"), notes = NA)
+  cfg <- default_comparator_config(fields = c("species", "notes"))
+  cells <- score_cells(pairs, ai, gold, cfg)
+  st <- function(pid, f) cells$state[cells$pair_id == pid & cells$field == f]
+  # Paired and both empty: they agree there is nothing there.
+  expect_equal(st("p1", "notes"), "blank")
+  # No partner record and no value: nothing was compared. Grey, in no metric.
+  expect_equal(st("p2", "notes"), "gold_only_blank")
+  expect_equal(unname(state_colour("gold_only_blank")), "grey")
+  expect_equal(unname(state_colour("gold_only")), "yellow")
+  fm <- field_metrics(cells)
+  expect_equal(fm$n_scored[fm$field == "notes"], 0L)
+  expect_equal(fm$fn[fm$field == "notes"], 0L)
+  ct <- confusion_totals(cells, "notes")
+  expect_equal(sum(ct$by_outcome$n), 1L)
+  pf <- paper_field_outcomes(cells)
+  expect_equal(pf$n_unpaired_blank[pf$field == "notes"], 1L)
+  expect_true(is.na(pf$agreement[pf$field == "notes"]))
+})

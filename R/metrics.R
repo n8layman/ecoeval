@@ -7,6 +7,7 @@
 #   AI populated, gold not  FP        gold only       FN
 #   gold populated, AI not  FN        AI only         FP
 #   both blank              TN (drops out of precision and recall)
+#   blank, no partner       nothing -- there was no comparison to make
 #
 # Counting a disagreement as both is the standard multi-class treatment: a
 # misclassification is a false positive for the value asserted and a false
@@ -29,8 +30,21 @@ state_contributions <- function() {
     "gold_missing",    0L,  1L,  0L,  0L,
     "ai_only",         0L,  1L,  0L,  0L,
     "gold_only",       0L,  0L,  1L,  0L,
-    "blank",           0L,  0L,  0L,  1L
+    "blank",           0L,  0L,  0L,  1L,
+    "ai_only_blank",   0L,  0L,  0L,  0L,
+    "gold_only_blank", 0L,  0L,  0L,  0L
   )
+}
+
+#' Whether a cell was a comparison at all
+#'
+#' A column neither paired record filled in, or one an unpaired record left
+#' empty, says nothing about extraction quality and stays out of every
+#' denominator.
+#' @keywords internal
+#' @noRd
+is_compared <- function(state) {
+  !state %in% c("blank", "ai_only_blank", "gold_only_blank")
 }
 
 #' The four outcomes a reader acts on
@@ -53,16 +67,23 @@ state_contributions <- function() {
 #' extraction quality. The states are what the metrics are computed over; the
 #' outcomes are what the grid and the heatmap are coloured by.
 #'
+#' Both-blank is agreement only between paired records. An unpaired record's
+#' empty column (`ai_only_blank`, `gold_only_blank`) is a fifth outcome, `none`:
+#' one side has no record and the other has no value, so there was nothing to
+#' compare. It is shown grey, apart from the one-sided values a reader acts on,
+#' and like a both-blank cell it moves no number.
+#'
 #' @param state A character vector of cell states.
 #' @return A character vector of outcomes: `agree`, `disagree`, `only_gold`,
-#'   `only_ai`.
+#'   `only_ai`, `none`.
 #' @examples
 #' cell_outcome(c("agree", "blank", "ai_missing", "ai_only"))
 #' @export
 cell_outcome <- function(state) {
   unname(c(agree = "agree", blank = "agree", disagree = "disagree",
            ai_missing = "only_gold", gold_only = "only_gold",
-           gold_missing = "only_ai", ai_only = "only_ai")[state])
+           gold_missing = "only_ai", ai_only = "only_ai",
+           ai_only_blank = "none", gold_only_blank = "none")[state])
 }
 
 #' The outcomes in reading order, with the labels they are shown under
@@ -80,13 +101,16 @@ outcome_labels <- function(labels = current_labels()) {
             else "Agree (TP, or TN where neither side has a value)",
     disagree = paste0("Both have a value, they differ", cm_tag(labels, "FP + FN")),
     only_gold = paste0(side_only(labels, "gold"), cm_tag(labels, "FN")),
-    only_ai = paste0(side_only(labels, "ai"), cm_tag(labels, "FP")))
+    only_ai = paste0(side_only(labels, "ai"), cm_tag(labels, "FP")),
+    none = "No record on one side, blank on the other")
 }
 
 #' Grid colour for each cell state
 #'
 #' Fill carries agreement, through [cell_outcome()], so the comparison grid and
-#' the overview heatmap say the same thing with the same four colours. Schema
+#' the overview heatmap say the same thing with the same colours. Grey is the
+#' one cell that compared nothing: no record on one side, no value on the
+#' other. Schema
 #' violations are marked, not coloured -- validity is orthogonal to match
 #' state, and a cell can be both.
 #'
@@ -95,7 +119,7 @@ outcome_labels <- function(labels = current_labels()) {
 #' @export
 state_colour <- function(state) {
   c(agree = "green", disagree = "purple", only_gold = "yellow",
-    only_ai = "orange")[cell_outcome(state)]
+    only_ai = "orange", none = "grey")[cell_outcome(state)]
 }
 
 #' Precision, recall and F1 from raw counts
@@ -139,7 +163,7 @@ field_metrics <- function(cells) {
     tp = sum(.data$tp), fp = sum(.data$fp),
     fn = sum(.data$fn), tn = sum(.data$tn),
     # Every cell where at least one side had a value; both-blank drops out.
-    n_scored = sum(.data$state != "blank"),
+    n_scored = sum(is_compared(.data$state)),
     n_pending = sum(.data$pending),
     n_overridden = sum(.data$overridden),
     .groups = "drop"
@@ -473,8 +497,10 @@ confusion_totals <- function(cells, field = NULL, labels = current_labels()) {
                                    "ai_only", "blank")))
 
   contrib <- state_contributions()
-  d <- dplyr::left_join(tibble::tibble(state = as.character(cells$state)),
-                        contrib, by = "state")
+  # An unpaired record's empty column was never a comparison, so it is in no box.
+  state <- as.character(cells$state)
+  state <- state[!state %in% c("ai_only_blank", "gold_only_blank")]
+  d <- dplyr::left_join(tibble::tibble(state = state), contrib, by = "state")
   d$category <- ifelse(d$state == "blank", "blank", cell_outcome(d$state))
 
   count <- function(cat, col) {
@@ -530,7 +556,7 @@ confusion_totals <- function(cells, field = NULL, labels = current_labels()) {
 #'
 #' @return A tibble with `paper`, `field`, `agreement`, `outcome`, `n_cells`,
 #'   `n_scored`, and `n_agree`, `n_blank`, `n_disagree`, `n_only_gold`,
-#'   `n_only_ai`.
+#'   `n_only_ai`, `n_unpaired_blank` (an unmatched record's empty column).
 #' @export
 paper_field_outcomes <- function(cells, papers = NULL, fields = NULL) {
   papers <- papers %||% sort(unique(cells$paper))
@@ -540,7 +566,7 @@ paper_field_outcomes <- function(cells, papers = NULL, fields = NULL) {
                      n_cells = integer(), n_scored = integer(),
                      n_agree = integer(), n_blank = integer(),
                      n_disagree = integer(), n_only_gold = integer(),
-                     n_only_ai = integer())
+                     n_only_ai = integer(), n_unpaired_blank = integer())
   if (!length(papers) || !length(fields)) return(proto)
 
   grid <- tibble::tibble(
@@ -560,15 +586,18 @@ paper_field_outcomes <- function(cells, papers = NULL, fields = NULL) {
       n_disagree = sum(.data$outcome == "disagree"),
       n_only_gold = sum(.data$outcome == "only_gold"),
       n_only_ai = sum(.data$outcome == "only_ai"),
+      n_compared = sum(is_compared(.data$state)),
       .groups = "drop"
     )
     grid <- dplyr::left_join(grid, counts, by = c("paper", "field"))
   }
   for (nm in c("n_cells", "n_agree", "n_blank", "n_disagree", "n_only_gold",
-               "n_only_ai")) {
+               "n_only_ai", "n_compared")) {
     grid[[nm]] <- as.integer(dplyr::coalesce(grid[[nm]], 0L))
   }
-  grid$n_scored <- grid$n_cells - grid$n_blank
+  # Both-blank pairs and an unpaired record's empty columns stay out.
+  grid$n_scored <- grid$n_compared
+  grid$n_unpaired_blank <- grid$n_cells - grid$n_compared - grid$n_blank
   grid$agreement <- ifelse(grid$n_scored > 0L, grid$n_agree / grid$n_scored,
                            NA_real_)
   # Only for a tile whose cells all say the same thing; anywhere else the four
@@ -675,7 +704,7 @@ record_field_outcomes <- function(cells, paper, fields = NULL,
 #' @export
 suspect_pairs <- function(cells, linkage_fields = character(0)) {
   paired <- cells[!is.na(cells$ai_rid) & !is.na(cells$gold_rid) &
-                    cells$state != "blank", , drop = FALSE]
+                    is_compared(cells$state), , drop = FALSE]
   proto <- empty_tbl(pair_id = character(), paper = character(),
                      n_fields = integer(), reason = character())
   if (!nrow(paired)) return(proto)

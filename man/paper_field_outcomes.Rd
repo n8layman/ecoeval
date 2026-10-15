@@ -18,7 +18,7 @@ so the overview covers all of scope.}
 \value{
 A tibble with \code{paper}, \code{field}, \code{agreement}, \code{outcome}, \code{n_cells},
 \code{n_scored}, and \code{n_agree}, \code{n_blank}, \code{n_disagree}, \code{n_only_gold},
-\code{n_only_ai}.
+\code{n_only_ai}, \code{n_unpaired_blank} (an unmatched record's empty column).
 }
 \description{
 The data behind the overview heatmap: one row per paper per column, holding

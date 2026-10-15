@@ -292,7 +292,13 @@ judge_cached <- function(judge, field, a, b, cache = NULL) {
 #'
 #' States: `agree`, `disagree`, `ai_missing` (paired, AI blank, gold has a
 #' value), `gold_missing` (paired, gold blank, AI has a value), `ai_only`
-#' (unpaired AI record), `gold_only` (unpaired gold record), `blank`.
+#' (unpaired AI record), `gold_only` (unpaired gold record), `blank` (paired,
+#' both blank), and `ai_only_blank` / `gold_only_blank` (an unpaired record
+#' that left this column empty).
+#'
+#' Two blanks agree only when the records were paired. A record with no partner
+#' has nothing to agree with, so its empty columns are not agreement: they
+#' colour as the one-sided record they belong to and count in no metric.
 #'
 #' @param pairs A tibble from [align_records()] with `pair_id`, `paper`,
 #'   `ai_rid`, `gold_rid`.
@@ -344,10 +350,10 @@ score_cells <- function(pairs, ai, gold, config,
       blank_b <- isTRUE(is_blank(list(gv))[[1L]])
 
       if (!has_gold) {
-        state <- if (blank_a) "blank" else "ai_only"
+        state <- if (blank_a) "ai_only_blank" else "ai_only"
         res <- cmp_result(FALSE, "unpaired", NA_real_)
       } else if (!has_ai) {
-        state <- if (blank_b) "blank" else "gold_only"
+        state <- if (blank_b) "gold_only_blank" else "gold_only"
         res <- cmp_result(FALSE, "unpaired", NA_real_)
       } else {
         res <- compare_pair(

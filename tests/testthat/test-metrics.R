@@ -276,8 +276,11 @@ test_that("the colours add up to the confusion matrix the metrics are built on",
   expect_equal(ct$precision, ct$tp / (ct$tp + ct$fp))
   expect_equal(ct$recall, ct$tp / (ct$tp + ct$fn))
 
-  # Every cell is counted exactly once, and the rows are the five boxes.
-  expect_equal(sum(ct$by_outcome$n), nrow(fx$cells))
+  # Every comparison is counted exactly once, and the rows are the five boxes.
+  # An unmatched record's empty column was not a comparison and is in none.
+  unpaired_blank <- fx$cells$state %in% c("ai_only_blank", "gold_only_blank")
+  expect_gt(sum(unpaired_blank), 0L)
+  expect_equal(sum(ct$by_outcome$n), sum(!unpaired_blank))
   expect_equal(ct$by_outcome$outcome,
                c("agree", "disagree", "only_gold", "only_ai", "blank"))
 })
