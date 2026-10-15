@@ -642,6 +642,35 @@ test_that("the cell pop-up shows where each value appears in the document", {
                      as.character(cell_modal_body(cells, "p1", "species"))))
 })
 
+test_that("the extraction's quote shows even when the reference has no quote column", {
+  skip_without_app()
+  # The usual case: only the extraction records supporting sentences, so the
+  # column is never mapped or scored, and the cells know nothing of it.
+  cells <- tibble::tibble(
+    pair_id = "p1", paper = "x", field = "species",
+    ai_value = "Myotis lucifugus", gold_value = "Eptesicus fuscus",
+    ai_original = "Myotis lucifugus", gold_original = "Eptesicus fuscus",
+    state = "disagree", rung = "normalized", score = NA_real_,
+    rationale = NA_character_, pending = FALSE, ai_rid = "a00002", gold_rid = "g00001"
+  )
+  ai_raw <- tibble::tibble(
+    doi = c("x", "x"), species = c("Other", "Myotis lucifugus"),
+    all_supporting_source_sentences = c("Wrong row.", "Myotis lucifugus roosted here.")
+  )
+  gold_raw <- tibble::tibble(doi = "x", species = "Eptesicus fuscus")
+  q <- pair_quotes(ai_raw, gold_raw, "a00002", "g00001")
+  expect_equal(q$ai, "Myotis lucifugus roosted here.")
+  expect_true(is.na(q$gold))
+
+  html <- as.character(cell_modal_body(cells, "p1", "species", quotes = q))
+  expect_match(html, "Myotis lucifugus roosted here.", fixed = TRUE)
+  expect_false(grepl("Wrong row", html))
+  # No empty block for a side that never had a quote column, and no claim
+  # that there is nothing to show.
+  expect_equal(lengths(regmatches(html, gregexpr("Supporting sentences", html))), 1L)
+  expect_false(grepl("no quoted text", html))
+})
+
 test_that("a heatmap click is read without asking plotly for event data", {
   skip_without_app()
   input <- list(`plotly_click-eco_heatmap` = '[{"key":"p1::species"}]')

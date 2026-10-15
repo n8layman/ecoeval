@@ -118,21 +118,58 @@ document_section <- function(document, row, quote_row = NULL, labels = lab()) {
   )
 }
 
+# The sentences one record quoted, read from its side's table as loaded rather
+# than from the scored cells. The quote column is usually extraction-only -- a
+# reference rarely records one -- so it is never mapped or scored, and looking
+# for it among the cells would find nothing for exactly the records where it
+# matters. A record's `.rid` is its row in the table it came from (see
+# prepare_records()). NA when the side has no quote column or no record.
+record_quote <- function(raw, rid) {
+  col <- if (!is.null(raw)) ecoeval::evidence_field(names(raw)) else NA_character_
+  row <- suppressWarnings(as.integer(sub("^\\D+", "", rid %||% NA_character_)))
+  if (is.na(col) || length(row) != 1L || is.na(row) || row > nrow(raw)) {
+    return(NA_character_)
+  }
+  value <- as.character(raw[[col]][[row]])
+  if (isTRUE(ecoeval::is_blank(value))) NA_character_ else value
+}
+
+# Both sides' quotes for one pair, with which sides have a quote column at all.
+pair_quotes <- function(ai_raw, gold_raw, ai_rid, gold_rid) {
+  has <- function(raw) !is.null(raw) && !is.na(ecoeval::evidence_field(names(raw)))
+  list(ai = record_quote(ai_raw, ai_rid), gold = record_quote(gold_raw, gold_rid),
+       sides = c(ai = has(ai_raw), gold = has(gold_raw)))
+}
+
 # What one clicked tile shows: what each side said, the sentences each side
 # quoted for it, and how the verdict was reached. The quoted text is the thing
 # that settles a disagreement -- without it a reader has two values and no way
 # to tell which one read the paper correctly.
+#
+# `quotes` is a pair_quotes() result. Without one, the quotes come from the
+# `evidence` column among the scored cells, when there is one.
 cell_modal_body <- function(cells, pair_id, field, evidence = NA_character_,
                             config = NULL, violations = character(0),
-                            label = NULL, kind = NULL, document = NULL) {
+                            label = NULL, kind = NULL, document = NULL,
+                            quotes = NULL) {
   row <- cells[cells$pair_id == pair_id & cells$field == field, , drop = FALSE]
   if (!nrow(row)) {
     return(div(class = "eco-note", "That cell is no longer in the comparison."))
   }
   row <- row[1, ]
 
-  quote_row <- if (!is.na(evidence) && !identical(evidence, field)) {
-    cells[cells$pair_id == pair_id & cells$field == evidence, , drop = FALSE]
+  if (is.null(quotes) && !is.na(evidence)) {
+    q <- cells[cells$pair_id == pair_id & cells$field == evidence, , drop = FALSE]
+    if (nrow(q)) {
+      quotes <- list(ai = original(q, "ai")[[1L]], gold = original(q, "gold")[[1L]],
+                     sides = c(ai = TRUE, gold = TRUE))
+    }
+  }
+  # The column being clicked is not repeated as its own evidence block.
+  if (!is.na(evidence) && identical(evidence, field)) quotes <- NULL
+  if (!is.null(quotes) && !any(quotes$sides)) quotes <- NULL
+  quote_row <- if (!is.null(quotes)) {
+    tibble::tibble(ai_original = quotes$ai, gold_original = quotes$gold)
   }
   offending <- c(
     AI = paste("ai", field, ecoeval::canonicalise(row$ai_value)) %in% violations,
@@ -164,12 +201,12 @@ cell_modal_body <- function(cells, pair_id, field, evidence = NA_character_,
                 if (length(label)) label[[1L]] else "")),
     value_block(lab()$ai, original(row, "ai"), row$ai_value),
     value_block(lab()$gold, original(row, "gold"), row$gold_value),
-    if (!is.null(quote_row) && nrow(quote_row)) {
+    if (!is.null(quotes)) {
       tagList(
-        value_block(paste("Supporting sentences —", lab()$ai),
-                    original(quote_row, "ai")[[1L]]),
-        value_block(paste("Supporting sentences —", lab()$gold),
-                    original(quote_row, "gold")[[1L]])
+        if (quotes$sides[["ai"]])
+          value_block(paste("Supporting sentences —", lab()$ai), quotes$ai),
+        if (quotes$sides[["gold"]])
+          value_block(paste("Supporting sentences —", lab()$gold), quotes$gold)
       )
     },
     document_section(document, row, quote_row),
@@ -187,11 +224,10 @@ cell_modal_body <- function(cells, pair_id, field, evidence = NA_character_,
           "The cheap rungs could not settle this one and the judge has not",
           "run yet, so it counts as a disagreement for now. Resolve all",
           "differences to have the judge decide it."),
-    if (is.na(evidence))
+    if (is.null(quotes) && is.na(evidence))
       div(class = "eco-note", style = "margin-top:10px;",
-          paste("No supporting-sentence column is being scored, so there is no",
-                "quoted text to show. If the extraction has one, map it in the",
-                "record-field stage."))
+          paste("Neither side has a supporting-sentence column, so there is no",
+                "quoted text to show."))
   )
 }
 
@@ -402,6 +438,7 @@ mod_compare_server <- function(id, rv) {
         cell_modal_body(
           rv$cells, sc$pair_id, sc$field,
           evidence = ecoeval::evidence_field(unique(rv$cells$field)),
+          quotes = pair_quotes(rv$ai_raw, rv$gold_raw, row$ai_rid, row$gold_rid),
           config = rv$comparators, violations = violation_keys(rv),
           label = unique(as.character(d$label[d$pair_id == sc$pair_id])),
           kind = unique(d$kind[d$pair_id == sc$pair_id]),
