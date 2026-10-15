@@ -362,8 +362,8 @@ mod_dashboard_server <- function(id, rv) {
       rv$stage <- "compare"
     }
 
-    observeEvent(plotly::event_data("plotly_click", source = HEATMAP_SOURCE), {
-      ev <- plotly::event_data("plotly_click", source = HEATMAP_SOURCE)
+    observeEvent(plotly_click(HEATMAP_SOURCE), {
+      ev <- plotly_click(HEATMAP_SOURCE)
       tile <- ecoeval::parse_tile_key(ev$key)
       if (!is.null(tile)) open_paper(tile$row, tile$field)
     })

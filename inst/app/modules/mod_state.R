@@ -382,6 +382,16 @@ field_from_label <- function(label, fields) {
   if (length(hit)) hit[[1L]] else NULL
 }
 
+# A tile click, read straight from the input the widget sends it on. Not
+# plotly::event_data(): an observer asks for the click as soon as the app
+# starts, long before the heatmap is drawn -- and a big paper draws a static
+# plot that never registers at all -- and event_data() warns every time it is
+# asked for an event no widget has registered yet.
+plotly_click <- function(source, session = shiny::getDefaultReactiveDomain()) {
+  raw <- session$rootScope()$input[[paste0("plotly_click-", source)]]
+  if (is.null(raw)) NULL else jsonlite::parse_json(raw, simplifyVector = TRUE)
+}
+
 # The interactive heatmap: hoverable tiles, clickable tiles, clickable column
 # names. Tiles come back through plotly's own click event, which only reaches
 # the server for a given source once that event is registered on the widget --

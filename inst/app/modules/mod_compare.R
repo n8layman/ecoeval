@@ -369,8 +369,8 @@ mod_compare_server <- function(id, rv) {
       if (length(hit)) hit[[1L]] else NULL
     }
 
-    observeEvent(plotly::event_data("plotly_click", source = RECORD_HEATMAP_SOURCE), {
-      ev <- plotly::event_data("plotly_click", source = RECORD_HEATMAP_SOURCE)
+    observeEvent(plotly_click(RECORD_HEATMAP_SOURCE), {
+      ev <- plotly_click(RECORD_HEATMAP_SOURCE)
       tile <- ecoeval::parse_tile_key(ev$key)
       if (is.null(tile)) return()
       select_cell(tile$row, tile$field)

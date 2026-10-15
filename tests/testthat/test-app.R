@@ -641,3 +641,12 @@ test_that("the cell pop-up shows where each value appears in the document", {
   expect_false(grepl("In the document",
                      as.character(cell_modal_body(cells, "p1", "species"))))
 })
+
+test_that("a heatmap click is read without asking plotly for event data", {
+  skip_without_app()
+  input <- list(`plotly_click-eco_heatmap` = '[{"key":"p1::species"}]')
+  session <- list(rootScope = function() list(input = input))
+  expect_equal(plotly_click("eco_heatmap", session)$key, "p1::species")
+  # Before the heatmap is drawn there is no click, and no warning either.
+  expect_no_warning(expect_null(plotly_click("eco_record_heatmap", session)))
+})
