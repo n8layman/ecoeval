@@ -1,4 +1,4 @@
-# ecoeval (development version)
+# ecoeval 0.2.0
 
 ## Setup inputs as arguments (#16)
 
