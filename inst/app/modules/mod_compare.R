@@ -26,98 +26,6 @@ original <- function(cells, side) {
   cells[[paste0(side, "_original")]] %||% cells[[paste0(side, "_value")]]
 }
 
-# Text with each match wrapped in a <mark>, coloured by whose value it is. A
-# match that overlaps one already marked is left plain rather than nested.
-# Built as one string: the passages are shown with their line breaks kept, and
-# the newlines and indentation htmltools puts between tags would show as gaps.
-highlight_text <- function(text, marks) {
-  esc <- function(x) htmltools::htmlEscape(x)
-  if (!NROW(marks)) return(HTML(esc(text)))
-  marks <- marks[order(marks$start, -marks$end), , drop = FALSE]
-  out <- character(0)
-  pos <- 1L
-  for (i in seq_len(nrow(marks))) {
-    s <- marks$start[[i]]
-    e <- marks$end[[i]]
-    if (s < pos) next
-    if (s > pos) out <- c(out, esc(substr(text, pos, s - 1L)))
-    out <- c(out, sprintf('<mark class="eco-mark eco-mark-%s">%s</mark>',
-                          marks$side[[i]], esc(substr(text, s, e))))
-    pos <- e + 1L
-  }
-  if (pos <= nchar(text)) out <- c(out, esc(substr(text, pos, nchar(text))))
-  HTML(paste(out, collapse = ""))
-}
-
-# What the paper itself says about this cell: the passages where either side's
-# value, or the sentence it quoted, appears, with a note for any value the text
-# does not contain -- the usual sign the extraction made it up, or that the OCR
-# lost it. The whole text and the extraction's reasoning fold away beneath.
-document_section <- function(document, row, quote_row = NULL, labels = lab()) {
-  if (is.null(document) || !NROW(document) ||
-      isTRUE(ecoeval::is_blank(document$text[[1L]]))) {
-    return(NULL)
-  }
-  text <- document$text[[1L]]
-  ai <- original(row, "ai")
-  gold <- original(row, "gold")
-  # The same value on both sides is one thing to find, marked as both.
-  same <- !is.na(ai) && !is.na(gold) &&
-    identical(ecoeval::canonicalise(ai), ecoeval::canonicalise(gold))
-  terms <- if (same) c(both = ai) else c(ai = ai, gold = gold)
-  if (!is.null(quote_row) && nrow(quote_row)) {
-    terms <- c(terms, ai_quote = original(quote_row, "ai")[[1L]],
-               gold_quote = original(quote_row, "gold")[[1L]])
-  }
-  terms <- terms[!is.na(terms) & nzchar(trimws(terms))]
-  if (!length(terms)) return(NULL)
-
-  res <- ecoeval::document_passages(text, terms)
-  value_sides <- intersect(names(terms), c("ai", "gold", "both"))
-  missing <- value_sides[!res$found[value_sides]]
-  who <- c(ai = labels$ai, gold = labels$gold, both = "Both sides'")
-  key <- function(side, what) span(class = paste0("eco-mark eco-mark-", side), what)
-
-  whole <- ecoeval::document_passages(text, terms, window = nchar(text),
-                                      max_per_term = 1000L)
-  # A window as long as the text makes the one passage the whole document.
-  full <- if (length(whole$passages)) {
-    highlight_text(whole$passages[[1L]]$text, whole$passages[[1L]]$marks)
-  } else highlight_text(text, NULL)
-
-  div(
-    class = "eco-modal-value eco-doc",
-    div(class = "k", "In the document"),
-    div(class = "eco-doc-key",
-        if (same) key("both", "value, both sides")
-        else tagList(key("ai", paste(labels$ai, "value")),
-                     key("gold", paste(labels$gold, "value"))),
-        if (any(grepl("_quote$", names(terms))))
-          tagList(key("ai_quote", paste(labels$ai, "quote")),
-                  key("gold_quote", paste(labels$gold, "quote")))),
-    lapply(missing, function(side) {
-      div(class = "eco-warn", style = "margin:6px 0;",
-          sprintf("%s value \u201c%s\u201d does not appear in the document.",
-                  who[[side]], terms[[side]]))
-    }),
-    if (length(res$passages)) {
-      lapply(res$passages, function(p) {
-        div(class = "eco-doc-passage", HTML(paste0(
-          if (p$start > 1L) "\u2026",
-          highlight_text(p$text, p$marks),
-          if (p$start + nchar(p$text) <= nchar(text)) "\u2026")))
-      })
-    } else {
-      div(class = "eco-note", "Neither value appears in the document text.")
-    },
-    tags$details(tags$summary("Read the whole document"),
-                 div(class = "eco-doc-full", full)),
-    if (!isTRUE(ecoeval::is_blank(document$reasoning[[1L]])))
-      tags$details(tags$summary("How the extraction reasoned"),
-                   div(class = "eco-doc-full", document$reasoning[[1L]]))
-  )
-}
-
 # The sentences one record quoted, read from its side's table as loaded rather
 # than from the scored cells. The quote column is usually extraction-only -- a
 # reference rarely records one -- so it is never mapped or scored, and looking
@@ -141,6 +49,32 @@ pair_quotes <- function(ai_raw, gold_raw, ai_rid, gold_rid) {
        sides = c(ai = has(ai_raw), gold = has(gold_raw)))
 }
 
+# One supporting passage as HTML. Passages are OCR markdown, so they are
+# rendered as markdown. A table row quoted on its own -- no header, no
+# delimiter line -- is not a markdown table and would read as a run of pipes,
+# so pipe rows with nothing else around them are drawn as a table directly.
+# Raw HTML in a passage is shown as text, never run.
+quote_html <- function(text) {
+  md <- function(x) {
+    commonmark::markdown_html(gsub("<", "&lt;", x, fixed = TRUE),
+                              hardbreaks = TRUE, extensions = TRUE)
+  }
+  lines <- trimws(strsplit(text, "\n")[[1L]])
+  lines <- lines[nzchar(lines)]
+  is_delim <- grepl("^\\|?\\s*:?-{3,}:?\\s*(\\|\\s*:?-{3,}:?\\s*)*\\|?$", lines)
+  if (length(lines) && all(grepl("|", lines, fixed = TRUE)) && !any(is_delim)) {
+    rows <- vapply(lines, function(l) {
+      cells <- strsplit(sub("^\\|", "", sub("\\|$", "", l)), "|", fixed = TRUE)[[1L]]
+      inline <- vapply(trimws(cells), function(c) {
+        sub("^<p>(.*)</p>\n?$", "\\1", md(c))
+      }, character(1))
+      paste0("<tr>", paste0("<td>", inline, "</td>", collapse = ""), "</tr>")
+    }, character(1))
+    return(HTML(paste0("<table>", paste(rows, collapse = ""), "</table>")))
+  }
+  HTML(md(text))
+}
+
 # What one clicked tile shows: what each side said, the sentences each side
 # quoted for it, and how the verdict was reached. The quoted text is the thing
 # that settles a disagreement -- without it a reader has two values and no way
@@ -150,8 +84,7 @@ pair_quotes <- function(ai_raw, gold_raw, ai_rid, gold_rid) {
 # `evidence` column among the scored cells, when there is one.
 cell_modal_body <- function(cells, pair_id, field, evidence = NA_character_,
                             config = NULL, violations = character(0),
-                            label = NULL, kind = NULL, document = NULL,
-                            quotes = NULL) {
+                            label = NULL, kind = NULL, quotes = NULL) {
   row <- cells[cells$pair_id == pair_id & cells$field == field, , drop = FALSE]
   if (!nrow(row)) {
     return(div(class = "eco-note", "That cell is no longer in the comparison."))
@@ -168,8 +101,10 @@ cell_modal_body <- function(cells, pair_id, field, evidence = NA_character_,
   # The column being clicked is not repeated as its own evidence block.
   if (!is.na(evidence) && identical(evidence, field)) quotes <- NULL
   if (!is.null(quotes) && !any(quotes$sides)) quotes <- NULL
-  quote_row <- if (!is.null(quotes)) {
-    tibble::tibble(ai_original = quotes$ai, gold_original = quotes$gold)
+  # ecoextract stores the quotes as a JSON array; one passage per sentence.
+  if (!is.null(quotes)) {
+    quotes$ai <- ecoeval::quote_sentences(quotes$ai)
+    quotes$gold <- ecoeval::quote_sentences(quotes$gold)
   }
   offending <- c(
     AI = paste("ai", field, ecoeval::canonicalise(row$ai_value)) %in% violations,
@@ -186,6 +121,12 @@ cell_modal_body <- function(cells, pair_id, field, evidence = NA_character_,
         div(if (is.na(value) || !nzchar(value))
               span(style = "opacity:.45;", "— nothing here —") else value),
         if (changed) div(class = "eco-note", paste("Compared as:", compared)))
+  }
+  quote_block <- function(label, sentences) {
+    div(class = "eco-modal-value",
+        div(class = "k", label),
+        if (!length(sentences)) span(style = "opacity:.45;", "— nothing here —")
+        else lapply(sentences, function(s) div(class = "eco-quote", quote_html(s))))
   }
 
 
@@ -204,12 +145,11 @@ cell_modal_body <- function(cells, pair_id, field, evidence = NA_character_,
     if (!is.null(quotes)) {
       tagList(
         if (quotes$sides[["ai"]])
-          value_block(paste("Supporting sentences —", lab()$ai), quotes$ai),
+          quote_block(paste("Supporting sentences —", lab()$ai), quotes$ai),
         if (quotes$sides[["gold"]])
-          value_block(paste("Supporting sentences —", lab()$gold), quotes$gold)
+          quote_block(paste("Supporting sentences —", lab()$gold), quotes$gold)
       )
     },
-    document_section(document, row, quote_row),
     div(class = "eco-status", tags$strong("Decided by: "), row$rung, " — ",
         rung_explanation(row$rung, row$score, field_threshold(config, field))),
     if (!is.na(row$rationale))
@@ -441,9 +381,7 @@ mod_compare_server <- function(id, rv) {
           quotes = pair_quotes(rv$ai_raw, rv$gold_raw, row$ai_rid, row$gold_rid),
           config = rv$comparators, violations = violation_keys(rv),
           label = unique(as.character(d$label[d$pair_id == sc$pair_id])),
-          kind = unique(d$kind[d$pair_id == sc$pair_id]),
-          document = if (!is.null(rv$documents))
-            rv$documents[rv$documents$.paper %in% row$paper, , drop = FALSE]
+          kind = unique(d$kind[d$pair_id == sc$pair_id])
         ),
         footer = tagList(
           if (row$state %in% c("agree", "disagree", "ai_missing", "gold_missing")) {

@@ -104,14 +104,11 @@ reference:
       - compute_scope
       - coverage_warning
 
-  - title: The source documents
+  - title: Supporting sentences
     desc: >
-      An ecoextract database keeps each paper's OCR text. The cell pop-up shows
-      where each side's value and quote appear in it.
+      The sentences a record was read from, shown in the cell pop-up.
     contents:
-      - read_ecoextract_texts
-      - document_texts
-      - document_passages
+      - quote_sentences
 
   - title: What identifies a paper
     desc: >

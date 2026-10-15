@@ -1,3 +1,17 @@
+# ecoeval 0.3.0
+
+* Supporting sentences stored as a JSON array, the way ecoextract stores
+  them, show in the cell pop-up as separate passages rather than as one raw
+  string of brackets and escaped quotes. `quote_sentences()` does the
+  splitting.
+* Each passage is rendered as markdown, since it is OCR text. A table row
+  quoted on its own is drawn as a table rather than a run of pipes.
+* **Removed:** the "In the document" section of the cell pop-up, which
+  searched an ecoextract database's OCR text for each value, and with it
+  `read_ecoextract_texts()`, `document_texts()`, and `document_passages()`.
+  The supporting sentences are the part of the document that matters for a
+  cell, and they come with the records.
+
 # ecoeval 0.2.0
 
 ## Setup inputs as arguments (#16)

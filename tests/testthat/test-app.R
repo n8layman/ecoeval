@@ -616,32 +616,6 @@ test_that("the interactive heatmap legend reads the side labels, not codes", {
   expect_equal(w$x$layout$legend$yref, "container")
 })
 
-test_that("the cell pop-up shows where each value appears in the document", {
-  skip_without_app()
-  cells <- tibble::tibble(
-    pair_id = "p1", paper = "x", field = c("species", "quote"),
-    ai_value = c("Myotis lucifugus", "Bats roosted under the bridge."),
-    gold_value = c("Eptesicus fuscus", NA),
-    ai_original = c("Myotis lucifugus", "Bats roosted under the bridge."),
-    gold_original = c("Eptesicus fuscus", NA),
-    state = c("disagree", "ai_only"), rung = "normalized", score = NA_real_,
-    rationale = NA_character_, pending = FALSE, ai_rid = "a1", gold_rid = "g1"
-  )
-  doc <- tibble::tibble(.paper = "x",
-                        text = "Bats roosted under the bridge. They were Myotis lucifugus.",
-                        reasoning = "Took the species from the results.")
-  html <- as.character(cell_modal_body(cells, "p1", "species", evidence = "quote",
-                                       document = doc))
-  expect_match(html, "In the document")
-  expect_match(html, '<mark class="eco-mark eco-mark-ai">Myotis lucifugus</mark>', fixed = TRUE)
-  expect_match(html, "eco-mark-ai_quote")
-  expect_match(html, "does not appear in the document")
-  expect_match(html, "How the extraction reasoned")
-  # Without a document there is no section at all.
-  expect_false(grepl("In the document",
-                     as.character(cell_modal_body(cells, "p1", "species"))))
-})
-
 test_that("the extraction's quote shows even when the reference has no quote column", {
   skip_without_app()
   # The usual case: only the extraction records supporting sentences, so the
@@ -669,6 +643,49 @@ test_that("the extraction's quote shows even when the reference has no quote col
   # that there is nothing to show.
   expect_equal(lengths(regmatches(html, gregexpr("Supporting sentences", html))), 1L)
   expect_false(grepl("no quoted text", html))
+})
+
+test_that("quotes stored as a JSON array show as separate sentences", {
+  skip_without_app()
+  cells <- tibble::tibble(
+    pair_id = "p1", paper = "x", field = "species",
+    ai_value = "Myotis lucifugus", gold_value = "Myotis lucifugus",
+    ai_original = "Myotis lucifugus", gold_original = "Myotis lucifugus",
+    state = "agree", rung = "exact", score = 1,
+    rationale = NA_character_, pending = FALSE, ai_rid = "a00001", gold_rid = "g00001"
+  )
+  ai_raw <- tibble::tibble(
+    doi = "x", species = "Myotis lucifugus",
+    supporting_text = '["Myotis lucifugus roosted here.", "BOX 6 7 Myotis"]'
+  )
+  q <- pair_quotes(ai_raw, NULL, "a00001", "g00001")
+  html <- as.character(cell_modal_body(cells, "p1", "species", quotes = q))
+  expect_equal(lengths(regmatches(html, gregexpr("eco-quote", html))), 2L)
+  expect_match(html, "Myotis lucifugus roosted here.", fixed = TRUE)
+  expect_false(grepl("[&quot;", html, fixed = TRUE))
+})
+
+test_that("a quoted passage renders as markdown, a lone table row as a table", {
+  skip_without_app()
+  row <- as.character(quote_html("Acanthastrea sp. | Pineapple coral | 65 | $1,912.00"))
+  expect_match(row, "<table>", fixed = TRUE)
+  expect_equal(lengths(regmatches(row, gregexpr("<td>", row))), 4L)
+  expect_match(row, "<td>Pineapple coral</td>", fixed = TRUE)
+  # Leading and trailing pipes are the row's edges, not empty cells.
+  edged <- as.character(quote_html("| a | **b** |\n| c | d |"))
+  expect_equal(lengths(regmatches(edged, gregexpr("<tr>", edged))), 2L)
+  expect_match(edged, "<td><strong>b</strong></td>", fixed = TRUE)
+
+  text <- as.character(quote_html("BOX 6 7 Euphyllia divisa\n16 *Acanthastrea* sp."))
+  expect_match(text, "<em>Acanthastrea</em>", fixed = TRUE)
+  expect_match(text, "<br", fixed = TRUE)
+  expect_false(grepl("<table>", text, fixed = TRUE))
+  # A full markdown table, header and all, is markdown's to render.
+  full <- as.character(quote_html("| a | b |\n|---|---|\n| 1 | 2 |"))
+  expect_match(full, "<th>a</th>", fixed = TRUE)
+  # Raw HTML is shown, not run.
+  expect_false(grepl("<img", as.character(quote_html("<img src=x onerror=alert(1)>")),
+                     fixed = TRUE))
 })
 
 test_that("a heatmap click is read without asking plotly for event data", {
