@@ -289,33 +289,64 @@ identity_fields <- function(rv) {
   rv$comparators$field[rv$comparators$linkage & rv$comparators$include]
 }
 
-#' What the cascade rung that decided a cell actually did
+#' How a cell's two values were compared, in words that need no manual
 #'
-#' Both modals -- the comparison grid's and the heatmap's -- have to explain
-#' this, and they should say the same thing. A similarity score means nothing
-#' without the cutoff it was measured against, so pass the column's threshold
-#' whenever it is to hand.
-rung_explanation <- function(rung, score = NA_real_, threshold = NA_real_) {
-  fuzzy_text <- function() {
-    if (is.na(threshold)) return(sprintf("String similarity %.3f.", score))
-    sprintf("String similarity %.3f, %s this column's %.2f cutoff.", score,
-            if (!is.na(score) && score >= threshold) "at or above" else "below",
-            threshold)
+#' Says what was checked and what it found, and agrees with the verdict shown
+#' above it: a cell that differs is never described as agreeing.
+#'
+#' @param row One cell.
+#' @param threshold The column's similarity cutoff, or `NA`.
+how_compared <- function(row, threshold = NA_real_) {
+  agree <- identical(row$state, "agree")
+  score <- row$score
+  pct <- function(x) sprintf("%.0f%%", 100 * x)
+  similar <- function() {
+    alike <- if (is.na(score)) "" else sprintf("The text is %s alike", pct(score))
+    cutoff <- if (is.na(threshold)) "" else
+      sprintf(", and this column counts %s or more as a match", pct(threshold))
+    if (!nzchar(alike)) return(if (agree) "Close enough to count as the same."
+                               else "Too different to count as the same.")
+    sprintf("%s %s%s.", if (agree) "Close enough to count as the same:" else
+              "Too different to count as the same:", alike, cutoff)
   }
   switch(
-    rung,
-    exact = "The two values are byte-identical.",
-    normalized = "They agree once trimmed and case-folded.",
-    numeric = "Compared as numbers, within the configured tolerance.",
-    date = "Parsed as dates, then compared.",
-    set = "Compared as sets of values.",
-    fuzzy = fuzzy_text(),
-    judge = "The LLM judge decided this one.",
-    override = "You decided this one.",
-    blank = "One or both sides are blank.",
-    unpaired = "This record has no counterpart, so there is nothing to compare.",
-    rung
+    row$rung,
+    exact = if (agree) "Identical." else "The text differs.",
+    normalized = if (agree) "The same once capital letters and extra spaces are ignored."
+                 else "Different, even ignoring capital letters and extra spaces.",
+    numeric = if (agree) "The same number." else "Different numbers.",
+    date = if (agree) "The same date, once both were read as dates." else "Different dates.",
+    set = if (agree) "The same items, in any order." else "The items listed differ.",
+    fuzzy = similar(),
+    judge = "An AI reviewer read both and judged whether they mean the same thing.",
+    override = "You decided this cell by hand.",
+    blank = if (agree) "Both sides are empty." else "One side is empty.",
+    unpaired = "This record has no partner on the other side, so there is nothing to compare.",
+    ""
   )
+}
+
+#' Why a cell is still waiting for the AI reviewer, and what to do about it
+#'
+#' A column set to use the AI reviewer is checked by the plain comparisons
+#' first. A cell waits for the reviewer only when those found no match, so
+#' until the reviewer reads it, it counts as a difference.
+#'
+#' @param judge_mode `"off"`, `"supplied"`, or `"default"`.
+#' @param available Whether a default reviewer can be built.
+pending_note <- function(judge_mode = "default", available = FALSE) {
+  first <- paste("This column is set to be checked by an AI reviewer when the",
+                 "wording differs.")
+  if (identical(judge_mode, "off")) {
+    return(paste(first, "The AI reviewer is turned off for this run, so this",
+                 "cell counts as a difference."))
+  }
+  if (identical(judge_mode, "default") && !available) {
+    return(paste(first, "No AI reviewer is set up -- that needs ANTHROPIC_API_KEY",
+                 "and the ellmer package -- so this cell counts as a difference."))
+  }
+  paste(first, "It has not read this cell yet, so for now it counts as a",
+        "difference. Press Resolve all differences on the dashboard to run it.")
 }
 
 #' A column's fuzzy cutoff, when there is a comparator configuration to ask

@@ -194,23 +194,24 @@ mod_dashboard_server <- function(id, rv) {
       tagList(
         if (n > 0L) eco_panel(
           "Resolve all differences",
-          paste("The judge runs across every scoped paper on paired rows only,",
-                "and only on cells the cheaper rungs could not settle.",
+          paste("An AI reviewer reads the cells whose wording differs in",
+                "columns set to use it -- paired rows only, and only where the",
+                "plain comparisons could not call it a match.",
                 "Verdicts are cached as they complete, so an interrupted run",
                 "picks up where it stopped, and a reproducible run has them",
                 "frozen rather than re-derived."),
           div(class = "eco-status",
-              sprintf("%d cells are unjudged. That is about %d LLM calls.", 
+              sprintf("%d cells are waiting for the AI reviewer. That is about %d LLM calls.", 
                       sum(rv$cells$pending), n)),
           if (identical(rv$judge_mode, "off"))
             div(class = "eco-note", style = "margin-top:8px;",
-                "The LLM is switched off for this run (judge = NULL), so these",
-                "cells stay unjudged and count as disagreements.")
+                "The AI reviewer is turned off for this run (judge = NULL), so",
+                "these cells count as differences.")
           else if (identical(rv$judge_mode, "default") && !ecoeval::judge_available())
             div(class = "eco-warn", style = "margin-top:8px;",
                 "No LLM is configured. Set ANTHROPIC_API_KEY in .env and",
-                "install ellmer to enable the judge. Until then those cells",
-                "count as disagreements and the dashboard says so.")
+                "install ellmer to turn on the AI reviewer. Until then those",
+                "cells count as differences.")
           else div(style = "margin-top:10px;",
                    actionButton(ns("resolve"), sprintf("Run %d calls", n),
                                 class = "btn-primary"))

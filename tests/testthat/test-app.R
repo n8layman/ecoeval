@@ -400,10 +400,10 @@ test_that("the cell modal says what happened, not just what decided it", {
   expect_true(grepl("They differ", html))
   expect_true(grepl("false positive and false negative", html))
   # A similarity score means nothing without the cutoff it was measured against.
-  expect_true(grepl("0.660", html))
-  expect_true(grepl("0.85 cutoff", html))
+  expect_true(grepl("66% alike", html))
+  expect_true(grepl("85% or more", html))
   # And an unsettled cell says it is provisional rather than looking decided.
-  expect_true(grepl("judge has not", html))
+  expect_true(grepl("counts as a difference", html))
 })
 
 test_that("the modal names a schema violation rather than only marking it", {
@@ -695,4 +695,33 @@ test_that("a heatmap click is read without asking plotly for event data", {
   expect_equal(plotly_click("eco_heatmap", session)$key, "p1::species")
   # Before the heatmap is drawn there is no click, and no warning either.
   expect_no_warning(expect_null(plotly_click("eco_record_heatmap", session)))
+})
+
+test_that("the pop-up says how a cell was compared in plain words", {
+  skip_without_app()
+  cell <- function(state, rung, score = NA_real_) {
+    tibble::tibble(state = state, rung = rung, score = score)
+  }
+  # A cell that differs is never described as agreeing.
+  expect_match(how_compared(cell("disagree", "normalized")), "^Different")
+  expect_match(how_compared(cell("agree", "normalized")), "capital letters")
+  expect_equal(how_compared(cell("disagree", "fuzzy", 0.6), threshold = 0.85),
+               "Too different to count as the same: The text is 60% alike, and this column counts 85% or more as a match.")
+  expect_match(how_compared(cell("agree", "fuzzy", 0.93)), "93% alike\\.$")
+  for (r in c("exact", "normalized", "fuzzy", "judge", "blank", "unpaired")) {
+    expect_false(grepl("rung|cascade", how_compared(cell("disagree", r))))
+  }
+})
+
+test_that("a cell waiting for the AI reviewer says why, and what to do", {
+  skip_without_app()
+  off <- pending_note("off")
+  expect_match(off, "turned off")
+  expect_false(grepl("Resolve all differences", off))
+  expect_match(pending_note("default", available = FALSE), "ANTHROPIC_API_KEY")
+  expect_match(pending_note("supplied"), "Resolve all differences")
+  for (note in c(off, pending_note("supplied"))) {
+    expect_match(note, "counts as a difference")
+    expect_false(grepl("rung|cascade", note))
+  }
 })

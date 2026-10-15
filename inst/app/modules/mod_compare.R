@@ -84,7 +84,8 @@ quote_html <- function(text) {
 # `evidence` column among the scored cells, when there is one.
 cell_modal_body <- function(cells, pair_id, field, evidence = NA_character_,
                             config = NULL, violations = character(0),
-                            label = NULL, kind = NULL, quotes = NULL) {
+                            label = NULL, kind = NULL, quotes = NULL,
+                            judge_mode = "default") {
   row <- cells[cells$pair_id == pair_id & cells$field == field, , drop = FALSE]
   if (!nrow(row)) {
     return(div(class = "eco-note", "That cell is no longer in the comparison."))
@@ -106,11 +107,10 @@ cell_modal_body <- function(cells, pair_id, field, evidence = NA_character_,
     quotes$ai <- ecoeval::quote_sentences(quotes$ai)
     quotes$gold <- ecoeval::quote_sentences(quotes$gold)
   }
-  offending <- c(
-    AI = paste("ai", field, ecoeval::canonicalise(row$ai_value)) %in% violations,
-    `gold standard` = paste("gold", field,
-                            ecoeval::canonicalise(row$gold_value)) %in% violations
-  )
+  offending <- stats::setNames(c(
+    paste("ai", field, ecoeval::canonicalise(row$ai_value)) %in% violations,
+    paste("gold", field, ecoeval::canonicalise(row$gold_value)) %in% violations
+  ), c(lab()$ai, lab()$gold))
   verdict <- state_verdict(row$state)
   # What a side said, and -- when a normaliser changed it -- what it was
   # compared as.
@@ -150,20 +150,18 @@ cell_modal_body <- function(cells, pair_id, field, evidence = NA_character_,
           quote_block(paste("Supporting sentences —", lab()$gold), quotes$gold)
       )
     },
-    div(class = "eco-status", tags$strong("Decided by: "), row$rung, " — ",
-        rung_explanation(row$rung, row$score, field_threshold(config, field))),
+    div(class = "eco-status", tags$strong("How they were compared: "),
+        how_compared(row, field_threshold(config, field))),
     if (!is.na(row$rationale))
       div(class = "eco-modal-value", style = "margin-top:10px;",
-          div(class = "k", "Rationale"), div(row$rationale)),
+          div(class = "k", "The AI reviewer's reasoning"), div(row$rationale)),
     if (any(offending))
       div(class = "eco-warn", style = "margin-top:10px;",
           sprintf("The %s value fails schema validation for this column.",
                   paste(names(offending)[offending], collapse = " and the "))),
     if (isTRUE(row$pending))
       div(class = "eco-warn", style = "margin-top:10px;",
-          "The cheap rungs could not settle this one and the judge has not",
-          "run yet, so it counts as a disagreement for now. Resolve all",
-          "differences to have the judge decide it."),
+          pending_note(judge_mode, ecoeval::judge_available())),
     if (is.null(quotes) && is.na(evidence))
       div(class = "eco-note", style = "margin-top:10px;",
           paste("Neither side has a supporting-sentence column, so there is no",
@@ -380,6 +378,7 @@ mod_compare_server <- function(id, rv) {
           evidence = ecoeval::evidence_field(unique(rv$cells$field)),
           quotes = pair_quotes(rv$ai_raw, rv$gold_raw, row$ai_rid, row$gold_rid),
           config = rv$comparators, violations = violation_keys(rv),
+          judge_mode = rv$judge_mode,
           label = unique(as.character(d$label[d$pair_id == sc$pair_id])),
           kind = unique(d$kind[d$pair_id == sc$pair_id])
         ),

@@ -1,3 +1,16 @@
+# ecoeval 0.3.1
+
+* The cell pop-up says how a cell was compared in plain words -- "Different,
+  even ignoring capital letters and extra spaces", "Too different to count as
+  the same: the text is 60% alike, and this column counts 85% or more as a
+  match" -- instead of naming an internal comparison step. It always matches
+  the verdict: a cell that differs was sometimes described as agreeing "once
+  trimmed".
+* A cell waiting for the AI reviewer says why, and what to do: with the
+  reviewer turned off (`judge = NULL`) it no longer tells you to press a button
+  that cannot help. The dashboard, field screen, and export README drop the
+  "rung" and "judge" wording the same way.
+
 # ecoeval 0.3.0
 
 * Supporting sentences stored as a JSON array, the way ecoextract stores
