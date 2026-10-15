@@ -161,7 +161,7 @@ bundle_readme <- function(scope, warnings = character(0), progress = NULL,
               progress$n_judged, progress$n_papers, progress$n_reviewed))
     if (progress$n_pending_cells > 0L) {
       lines <- c(lines, sprintf(
-        "  %d cells are still unjudged -- only the cheap comparator rungs ran on them.",
+        "  %d cells are still waiting for the AI reviewer -- only the plain comparisons ran on them.",
         progress$n_pending_cells))
     }
   }
