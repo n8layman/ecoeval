@@ -35,6 +35,8 @@ ui <- fluidPage(
   ),
   div(
     class = "eco-header",
+    tags$a(class = "eco-license", href = "https://www.gnu.org/licenses/gpl-3.0.html",
+           target = "_blank", "\u00a9 2026 Nathan Layman \u00b7 GPL-3 \u00b7 No warranty"),
     h1("ecoeval"),
     div(class = "eco-subtitle", textOutput("subtitle", inline = TRUE))
   ),
