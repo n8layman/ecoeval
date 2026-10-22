@@ -2,7 +2,7 @@ Package: ecoeval
 Title: Evaluate AI Extraction Accuracy Against a Human Gold Standard
 Version: 0.3.1
 Authors@R: c(
-    person("Nathan", "Layman", , "n8.layman@gmail.com", role = c("aut", "cre"),
+    person("Nathan", "Layman", , "n8.layman@gmail.com", role = c("aut", "cre", "cph"),
            comment = c(ORCID = "0000-0003-2238-6584")))
 Description: Provides an interactive Shiny dashboard for measuring how
     accurately an AI extraction pipeline performed against a human-curated
