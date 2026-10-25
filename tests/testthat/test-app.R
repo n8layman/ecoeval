@@ -809,6 +809,15 @@ test_that("row filters narrow the grid, say how many rows are hidden, and leave 
     expect_equal(nrow(heat()), 0L)
     expect_match(as.character(output$heatmap_ui$html), "match the filters")
 
+    # Typing alone changes nothing; Enter or the Filter button applies it.
+    session$setInputs(f_ai_only = TRUE, f_gold_only = TRUE, f_matched = TRUE)
+    session$setInputs(f_text = "no value says this")
+    expect_equal(length(unique(heat()$pair_id)), total)
+    session$setInputs(f_text_apply = 1)
+    expect_equal(nrow(heat()), 0L)
+    session$setInputs(f_text_enter = "")
+    expect_equal(length(unique(heat()$pair_id)), total)
+
     # View-only: nothing scored has changed.
     expect_identical(rv$cells, cells_before)
   })

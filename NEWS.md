@@ -5,7 +5,8 @@
   ticked: matched pairs, Extraction only, Reference only, and rows that fully
   agree (a row with a schema violation always shows). A "Links that look wrong
   (n)" button narrows the grid to the pairs `suspect_pairs()` flags, and a
-  search box finds rows containing a value on either side. A note under the
+  search box finds rows containing a value on either side. The search applies
+  when you press Enter or Filter, so the grid stays put while you type. A note under the
   grid points to the legend for hiding cells rather than rows: click an
   outcome to hide it, double-click to show only it.
 * Filters are view-only: hidden rows are still scored, and the metrics,
