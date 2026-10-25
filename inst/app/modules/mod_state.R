@@ -40,6 +40,9 @@ new_app_state <- function() {
     skip = character(0),
     judge_mode = "default",
     judge = NULL,
+    # The supporting-sentence columns named for each side; see
+    # launch_evidence().
+    evidence_col = list(),
 
     pairs = NULL, cells = NULL,
     conformance = NULL, collapses = NULL,
@@ -220,6 +223,24 @@ loaded_inputs <- function(rv) {
 current_keys <- function(rv) {
   list(ai = rv$ai_paper_key, gold = rv$gold_paper_key,
        ai_papers = rv$ai_papers_key, gold_papers = rv$gold_papers_key)
+}
+
+#' The supporting-sentence columns to use
+#'
+#' What run_eval_app() named, and for a side it left out, what a restored run
+#' used. A side neither names is found by name.
+#'
+#' @param given The `evidence_col` passed to run_eval_app(), as a list by side.
+#' @param saved A restored run's `evidence_col`, or `NULL`.
+launch_evidence <- function(given, saved = NULL) {
+  out <- list()
+  for (side in c("ai", "gold")) out[side] <- list(given[[side]] %||% saved[[side]])
+  out
+}
+
+#' Which column holds each side's supporting sentences
+evidence_cols <- function(rv) {
+  ecoeval::evidence_columns(rv$evidence_col, names(rv$ai_raw), names(rv$gold_raw))
 }
 
 #' Whether the LLM steps are allowed to run

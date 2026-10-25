@@ -1,3 +1,17 @@
+# ecoeval 0.4.0
+
+* `run_eval_app(evidence_col = )` names the column holding the supporting
+  sentences the cell pop-up shows (#34): one name for both sides, or one per
+  side, `c(ai = "supporting_text", gold = NA)`, where `NA` means that side has
+  none. A side not named is still found by name, so nothing changes for anyone
+  who does not set it. The argument matches ecoreview's `evidence_col`.
+* A named column the records do not have is reported in the pop-up -- "No
+  'suporting_text' column in the Extraction records ..." -- rather than
+  silently showing nothing, so a typo is visible.
+* The columns used are saved in `run_config.json`, so a reloaded run shows the
+  same quotes. A side named at launch overrides what the run saved.
+* `evidence_columns()` resolves the argument against each side's columns.
+
 # ecoeval 0.3.1
 
 * The cell pop-up says how a cell was compared in plain words -- "Different,

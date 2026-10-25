@@ -88,3 +88,15 @@ test_that("runs diff on the numbers that moved", {
   expect_equal(d$metric[[1L]], "f1")
   expect_equal(round(d$delta[[1L]], 3), 0.07)
 })
+
+test_that("a run configuration keeps each side's supporting-sentence column", {
+  path <- withr::local_tempfile(fileext = ".json")
+  cfg <- capture_run_config(new_run_config(),
+                            evidence_col = c(ai = "supporting_text", gold = NA))
+  write_run_config(cfg, path)
+  back <- read_run_config(path)
+  expect_equal(back$evidence_col, c(ai = "supporting_text", gold = NA))
+  # A run saved without one finds them by name.
+  write_run_config(new_run_config(), path)
+  expect_null(read_run_config(path)$evidence_col)
+})

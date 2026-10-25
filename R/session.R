@@ -37,6 +37,9 @@ new_run_config <- function() {
     label = NULL,
     # What the two sides were called; see side_labels().
     side_labels = NULL,
+    # Each side's supporting-sentence column, NA for none; see
+    # evidence_columns().
+    evidence_col = NULL,
     inputs = list(
       ai = NULL, ai_table = NULL, ai_paper_key = NULL,
       gold = NULL, gold_table = NULL, gold_paper_key = NULL,
@@ -160,6 +163,14 @@ normalise_run_config <- function(cfg) {
   } else {
     cfg$side_labels <- NULL
   }
+  # A side saved as null had no supporting-sentence column.
+  if (length(cfg$evidence_col)) {
+    ev <- lapply(cfg$evidence_col, function(v) as.character(unlist(v))[1L])
+    cfg$evidence_col <- c(ai = ev$ai %||% NA_character_,
+                          gold = ev$gold %||% NA_character_)
+  } else {
+    cfg$evidence_col <- NULL
+  }
   cfg
 }
 
@@ -175,6 +186,8 @@ normalise_run_config <- function(cfg) {
 #' @param scope The result of [compute_scope()].
 #' @param metrics A named list of headline numbers to record with the run.
 #' @param labels Side labels to record with the run; see [side_labels()].
+#' @param evidence_col Each side's supporting-sentence column, from
+#'   [evidence_columns()].
 #'
 #' @return The updated configuration list.
 #' @export
@@ -189,7 +202,8 @@ capture_run_config <- function(config,
                                reviewed = NULL,
                                scope = NULL,
                                metrics = NULL,
-                               labels = NULL) {
+                               labels = NULL,
+                               evidence_col = NULL) {
   if (!is.null(comparators)) {
     config$comparators <- df_to_rows(comparators)
     config$linkage_fields <- comparators$field[comparators$linkage]
@@ -204,6 +218,8 @@ capture_run_config <- function(config,
   if (!is.null(scope)) config$scope <- lapply(scope, as.character)
   if (!is.null(metrics)) config$metrics <- metrics
   if (!is.null(labels)) config$side_labels <- unclass(as_side_labels(labels))
+  # A list, not a named vector: jsonlite writes a named vector as an array.
+  if (!is.null(evidence_col)) config$evidence_col <- as.list(evidence_col)
   config
 }
 

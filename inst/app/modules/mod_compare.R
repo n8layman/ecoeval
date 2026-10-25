@@ -31,22 +31,29 @@ original <- function(cells, side) {
 # reference rarely records one -- so it is never mapped or scored, and looking
 # for it among the cells would find nothing for exactly the records where it
 # matters. A record's `.rid` is its row in the table it came from (see
-# prepare_records()). NA when the side has no quote column or no record.
-record_quote <- function(raw, rid) {
-  col <- if (!is.null(raw)) ecoeval::evidence_field(names(raw)) else NA_character_
+# prepare_records()). NA when the side has no quote column, the table lacks
+# the one named, or there is no record.
+record_quote <- function(raw, rid, col) {
   row <- suppressWarnings(as.integer(sub("^\\D+", "", rid %||% NA_character_)))
-  if (is.na(col) || length(row) != 1L || is.na(row) || row > nrow(raw)) {
+  if (is.null(raw) || is.na(col) || !col %in% names(raw) || length(row) != 1L ||
+      is.na(row) || row > nrow(raw)) {
     return(NA_character_)
   }
   value <- as.character(raw[[col]][[row]])
   if (isTRUE(ecoeval::is_blank(value))) NA_character_ else value
 }
 
-# Both sides' quotes for one pair, with which sides have a quote column at all.
-pair_quotes <- function(ai_raw, gold_raw, ai_rid, gold_rid) {
-  has <- function(raw) !is.null(raw) && !is.na(ecoeval::evidence_field(names(raw)))
-  list(ai = record_quote(ai_raw, ai_rid), gold = record_quote(gold_raw, gold_rid),
-       sides = c(ai = has(ai_raw), gold = has(gold_raw)))
+# Both sides' quotes for one pair, with which sides have a quote column at all
+# and which were named one their records do not have. `cols` is an
+# evidence_columns() result; found by name when NULL.
+pair_quotes <- function(ai_raw, gold_raw, ai_rid, gold_rid, cols = NULL) {
+  cols <- cols %||% ecoeval::evidence_columns(NULL, names(ai_raw), names(gold_raw))
+  sides <- c(ai = !is.null(ai_raw), gold = !is.null(gold_raw)) & !is.na(cols)
+  found <- c(ai = isTRUE(cols[["ai"]] %in% names(ai_raw)),
+             gold = isTRUE(cols[["gold"]] %in% names(gold_raw)))
+  list(ai = record_quote(ai_raw, ai_rid, cols[["ai"]]),
+       gold = record_quote(gold_raw, gold_rid, cols[["gold"]]),
+       sides = sides, missing = sides & !found, cols = cols)
 }
 
 # One supporting passage as HTML. Passages are OCR markdown, so they are
@@ -128,6 +135,19 @@ cell_modal_body <- function(cells, pair_id, field, evidence = NA_character_,
         if (!length(sentences)) span(style = "opacity:.45;", "— nothing here —")
         else lapply(sentences, function(s) div(class = "eco-quote", quote_html(s))))
   }
+  # One side's quotes -- or, when the column named for it is not in its
+  # records, a notice saying so, so a typo does not just show nothing.
+  side_quotes <- function(side) {
+    if (!quotes$sides[[side]]) return(NULL)
+    title <- paste("Supporting sentences —", lab()[[side]])
+    if (!isTRUE(quotes$missing[[side]])) return(quote_block(title, quotes[[side]]))
+    div(class = "eco-modal-value",
+        div(class = "k", title),
+        div(class = "eco-warn", sprintf(paste(
+          "No '%s' column in the %s records, so there are no supporting",
+          "sentences to show. Set evidence_col in run_eval_app() to the",
+          "supporting-sentence column."), quotes$cols[[side]], lab()[[side]])))
+  }
 
 
   tagList(
@@ -142,14 +162,7 @@ cell_modal_body <- function(cells, pair_id, field, evidence = NA_character_,
                 if (length(label)) label[[1L]] else "")),
     value_block(lab()$ai, original(row, "ai"), row$ai_value),
     value_block(lab()$gold, original(row, "gold"), row$gold_value),
-    if (!is.null(quotes)) {
-      tagList(
-        if (quotes$sides[["ai"]])
-          quote_block(paste("Supporting sentences —", lab()$ai), quotes$ai),
-        if (quotes$sides[["gold"]])
-          quote_block(paste("Supporting sentences —", lab()$gold), quotes$gold)
-      )
-    },
+    if (!is.null(quotes)) tagList(side_quotes("ai"), side_quotes("gold")),
     div(class = "eco-status", tags$strong("How they were compared: "),
         how_compared(row, field_threshold(config, field))),
     if (!is.na(row$rationale))
@@ -376,7 +389,8 @@ mod_compare_server <- function(id, rv) {
         cell_modal_body(
           rv$cells, sc$pair_id, sc$field,
           evidence = ecoeval::evidence_field(unique(rv$cells$field)),
-          quotes = pair_quotes(rv$ai_raw, rv$gold_raw, row$ai_rid, row$gold_rid),
+          quotes = pair_quotes(rv$ai_raw, rv$gold_raw, row$ai_rid, row$gold_rid,
+                               evidence_cols(rv)),
           config = rv$comparators, violations = violation_keys(rv),
           judge_mode = rv$judge_mode,
           label = unique(as.character(d$label[d$pair_id == sc$pair_id])),

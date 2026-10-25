@@ -522,6 +522,7 @@ mod_dashboard_server <- function(id, rv) {
         rejected = rv$rejected, added = rv$added, overrides = rv$overrides,
         cache = rv$judge_cache, norm_cache = rv$norm_cache,
         reviewed = rv$reviewed, scope = rv$scope, labels = lab(),
+        evidence_col = evidence_cols(rv),
         metrics = list(
           overall_accuracy = agg()$overall_accuracy,
           column_mean_accuracy = agg()$column_mean_accuracy,

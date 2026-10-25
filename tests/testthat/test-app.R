@@ -725,3 +725,59 @@ test_that("a cell waiting for the AI reviewer says why, and what to do", {
     expect_false(grepl("rung|cascade", note))
   }
 })
+
+test_that("a named supporting-sentence column is shown, NA hides a side", {
+  skip_without_app()
+  cells <- tibble::tibble(
+    pair_id = "p1", paper = "x", field = "species",
+    ai_value = "Myotis lucifugus", gold_value = "Myotis lucifugus",
+    ai_original = "Myotis lucifugus", gold_original = "Myotis lucifugus",
+    state = "agree", rung = "exact", score = 1,
+    rationale = NA_character_, pending = FALSE, ai_rid = "a00001", gold_rid = "g00001"
+  )
+  # A quote column no name pattern finds, beside one that only looks like it.
+  ai_raw <- tibble::tibble(doi = "x", species = "Myotis lucifugus",
+                           context = "Myotis lucifugus roosted here.",
+                           evidence_type = "direct")
+  gold_raw <- tibble::tibble(doi = "x", species = "Myotis lucifugus",
+                             notes = "Seen in the barn.")
+  cols <- evidence_columns(c(ai = "context", gold = NA), ai_raw, gold_raw)
+  q <- pair_quotes(ai_raw, gold_raw, "a00001", "g00001", cols)
+  expect_equal(q$ai, "Myotis lucifugus roosted here.")
+  expect_equal(q$sides, c(ai = TRUE, gold = FALSE))
+  html <- as.character(cell_modal_body(cells, "p1", "species", quotes = q))
+  expect_match(html, "Myotis lucifugus roosted here.", fixed = TRUE)
+  expect_false(grepl("direct", html))
+  expect_equal(lengths(regmatches(html, gregexpr("Supporting sentences", html))), 1L)
+})
+
+test_that("a named column the records lack is reported, not silently empty", {
+  skip_without_app()
+  cells <- tibble::tibble(
+    pair_id = "p1", paper = "x", field = "species",
+    ai_value = "Myotis lucifugus", gold_value = "Myotis lucifugus",
+    ai_original = "Myotis lucifugus", gold_original = "Myotis lucifugus",
+    state = "agree", rung = "exact", score = 1,
+    rationale = NA_character_, pending = FALSE, ai_rid = "a00001", gold_rid = "g00001"
+  )
+  ai_raw <- tibble::tibble(doi = "x", species = "Myotis lucifugus",
+                           supporting_text = "Myotis lucifugus roosted here.")
+  cols <- evidence_columns(c(ai = "suporting_text"), ai_raw, NULL)
+  q <- pair_quotes(ai_raw, NULL, "a00001", "g00001", cols)
+  expect_true(q$missing[["ai"]])
+  html <- as.character(cell_modal_body(cells, "p1", "species", quotes = q))
+  expect_match(html, "No 'suporting_text' column in the", fixed = TRUE)
+  expect_match(html, "Set evidence_col in run_eval_app()", fixed = TRUE)
+  expect_false(grepl("roosted here", html))
+})
+
+test_that("the launch's evidence columns win over a restored run's, side by side", {
+  skip_without_app()
+  saved <- c(ai = "supporting_text", gold = NA)
+  expect_equal(launch_evidence(list(), saved),
+               list(ai = "supporting_text", gold = NA_character_))
+  expect_equal(launch_evidence(list(gold = "notes"), saved),
+               list(ai = "supporting_text", gold = "notes"))
+  # Nothing named and nothing saved: both found by name.
+  expect_equal(launch_evidence(list()), list(ai = NULL, gold = NULL))
+})

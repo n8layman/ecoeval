@@ -73,6 +73,7 @@ server <- function(input, output, session) {
   rv$skip <- args$skip %||% character(0)
   rv$judge_mode <- args$judge_mode %||% "default"
   rv$judge <- args$judge
+  rv$evidence_col <- launch_evidence(args$evidence_col)
 
   restored <- NULL
   if (!is.null(args$run_config)) {
@@ -90,6 +91,9 @@ server <- function(input, output, session) {
       if (!isTRUE(args$labels_given) && !is.null(rv$config$side_labels)) {
         ecoeval::use_side_labels(rv$config$side_labels)
       }
+      # And the supporting-sentence columns, for any side the launch did not
+      # name.
+      rv$evidence_col <- launch_evidence(args$evidence_col, rv$config$evidence_col)
       showNotification("Restored the previous run.", type = "message")
     }, error = function(e) {
       showNotification(paste("Could not read the run configuration:",

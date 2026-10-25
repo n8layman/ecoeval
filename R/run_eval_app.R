@@ -67,6 +67,12 @@
 #'   neutral = TRUE)` also drops the TP/FP/FN wording, for a reference that is
 #'   a second source rather than ground truth; the metrics are unchanged.
 #'   Saved with the run.
+#' @param evidence_col The column holding the supporting sentences the cell
+#'   pop-up shows: one name for both sides, or one per side, `c(ai =
+#'   "supporting_text", gold = NA)`, where `NA` means that side has none. A side
+#'   not named is found by name, as [evidence_field()] does. A named column the
+#'   records do not have is reported in the pop-up. Saved with the run; see
+#'   [evidence_columns()].
 #' @param run_config Optional path to a `run_config.json` from an earlier
 #'   session. Reload it and you are exactly where you were -- inputs, mappings,
 #'   manual link decisions, and cached LLM verdicts included. Arguments passed
@@ -117,6 +123,7 @@ run_eval_app <- function(ai = NULL,
                          judge,
                          skip_setup = FALSE,
                          labels = NULL,
+                         evidence_col = NULL,
                          run_config = NULL,
                          launch.browser = TRUE,
                          ...) {
@@ -133,6 +140,7 @@ run_eval_app <- function(ai = NULL,
   gold_papers <- absolute_path(gold_papers)
   run_config <- absolute_path(run_config)
   check_skip(skip)
+  evidence_col <- as_evidence_spec(evidence_col)
   # The labels are a session option, so every plot and table the app draws
   # picks them up; put back whatever was there when the app closes.
   old_labels <- getOption("ecoeval.labels")
@@ -154,6 +162,7 @@ run_eval_app <- function(ai = NULL,
     judge = if (judge_mode == "supplied") judge,
     skip_setup = skip_setup,
     labels_given = !is.null(labels),
+    evidence_col = evidence_col,
     run_config = run_config,
     # Where the file browser starts, and what a path typed into the app is
     # relative to: the caller's directory, not the app's.

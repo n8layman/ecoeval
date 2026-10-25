@@ -16,7 +16,8 @@ capture_run_config(
   reviewed = NULL,
   scope = NULL,
   metrics = NULL,
-  labels = NULL
+  labels = NULL,
+  evidence_col = NULL
 )
 }
 \arguments{
@@ -39,6 +40,9 @@ capture_run_config(
 \item{metrics}{A named list of headline numbers to record with the run.}
 
 \item{labels}{Side labels to record with the run; see \code{\link[=side_labels]{side_labels()}}.}
+
+\item{evidence_col}{Each side's supporting-sentence column, from
+\code{\link[=evidence_columns]{evidence_columns()}}.}
 }
 \value{
 The updated configuration list.
