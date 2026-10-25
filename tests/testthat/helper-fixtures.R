@@ -112,3 +112,42 @@ scored_state <- function() shiny::isolate({
   rv$current_paper <- rv$scope$papers[[1L]]
   rv
 })
+
+# A LEMIS-like case on disk: the extraction splits one shipment line into
+# twelve rows by size class, where the reference has one row with the total
+# quantity. A second species is recorded the same way on both sides.
+lemis_files <- function(dir = withr::local_tempdir(.local_envir = parent.frame())) {
+  ai <- data.frame(
+    doi = "10.1/x",
+    species = c(rep("Pterois volitans", 12), "Amphiprion ocellaris"),
+    port = "Miami",
+    size_class = c(paste("size", 1:12), NA),
+    quantity = c(rep(10, 11), 30, 5),
+    supporting_text = c(sprintf("Line %d of the shipment.", 1:12), "Clownfish line.")
+  )
+  gold <- data.frame(
+    doi = "10.1/x",
+    species = c("Pterois volitans", "Amphiprion ocellaris"),
+    port = "Miami",
+    quantity = c(140, 5)
+  )
+  schema <- list(
+    type = "object",
+    properties = list(records = list(type = "array", items = list(
+      type = "object",
+      `x-unique-fields` = list("species", "port"),
+      properties = list(
+        species = list(type = "string", description = "Species."),
+        port = list(type = "string", description = "Port of entry."),
+        size_class = list(type = "string", description = "Size class."),
+        quantity = list(type = "number", description = "Number of animals.")
+      )
+    )))
+  )
+  paths <- list(ai = file.path(dir, "ai.csv"), gold = file.path(dir, "gold.csv"),
+                schema = file.path(dir, "schema.json"))
+  utils::write.csv(ai, paths$ai, row.names = FALSE)
+  utils::write.csv(gold, paths$gold, row.names = FALSE)
+  jsonlite::write_json(schema, paths$schema, auto_unbox = TRUE)
+  paths
+}

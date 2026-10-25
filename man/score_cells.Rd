@@ -43,7 +43,8 @@ A tibble with one row per cell: \code{pair_id}, \code{paper}, \code{ai_rid},
 \code{gold_rid}, \code{field}, \code{ai_value}, \code{gold_value} (the values compared),
 \code{ai_original}, \code{gold_original} (the values as read -- the same as the
 compared ones unless a normaliser changed them), \code{state}, \code{rung}, \code{score},
-\code{rationale}, \code{pending}, \code{overridden}.
+\code{rationale}, \code{pending}, \code{overridden}, and \code{mixed} (a rolled-up extraction value whose
+members differ; see \code{\link[=rollup_extraction]{rollup_extraction()}}).
 }
 \description{
 The scoring engine. Takes the paired-and-orphaned record layout produced by

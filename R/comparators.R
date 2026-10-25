@@ -319,7 +319,8 @@ judge_cached <- function(judge, field, a, b, cache = NULL) {
 #'   `gold_rid`, `field`, `ai_value`, `gold_value` (the values compared),
 #'   `ai_original`, `gold_original` (the values as read -- the same as the
 #'   compared ones unless a normaliser changed them), `state`, `rung`, `score`,
-#'   `rationale`, `pending`, `overridden`.
+#'   `rationale`, `pending`, `overridden`, and `mixed` (a rolled-up extraction value whose
+#'   members differ; see [rollup_extraction()]).
 #' @export
 score_cells <- function(pairs, ai, gold, config,
                         judge = NULL, cache = NULL, overrides = NULL,
@@ -349,6 +350,9 @@ score_cells <- function(pairs, ai, gold, config,
       has_gold <- !is.na(gold_idx[[i]])
       blank_a <- isTRUE(is_blank(list(av))[[1L]])
       blank_b <- isTRUE(is_blank(list(gv))[[1L]])
+      # A rolled-up extraction row whose members hold different values.
+      mixed <- has_ai && has_gold && length(av) > 1L &&
+        !identical(config$comparator[[k]], "set")
 
       if (!has_gold) {
         state <- if (blank_a) "ai_only_blank" else "ai_only"
@@ -357,14 +361,15 @@ score_cells <- function(pairs, ai, gold, config,
         state <- if (blank_b) "gold_only_blank" else "gold_only"
         res <- cmp_result(FALSE, "unpaired", NA_real_)
       } else {
-        res <- compare_pair(
-          av, gv,
+        cmp <- function(a) compare_pair(
+          a, gv,
           comparator = config$comparator[[k]],
           threshold = config$threshold[[k]],
           tolerance = config$tolerance[[k]],
           set_mode = config$set_mode[[k]],
           judge = judge, field = field, cache = cache
         )
+        res <- if (mixed) mixed_compare(av, cmp) else cmp(av)
         state <- if (blank_a && blank_b) "blank"
         else if (blank_a) "ai_missing"
         else if (blank_b) "gold_missing"
@@ -386,7 +391,8 @@ score_cells <- function(pairs, ai, gold, config,
         score = res$score,
         rationale = res$rationale,
         pending = isTRUE(res$pending),
-        overridden = FALSE
+        overridden = FALSE,
+        mixed = mixed
       )
     })
     out[[i]] <- dplyr::bind_rows(rows)
@@ -421,6 +427,25 @@ apply_overrides <- function(cells, overrides = NULL) {
   cells
 }
 
+#' Compare a mixed rolled-up value against the reference
+#'
+#' Agrees when any member value agrees with the reference, taking the first
+#' that does; otherwise reports the closest member's result.
+#'
+#' @param values The members' distinct values.
+#' @param cmp A function comparing one value against the reference.
+#' @keywords internal
+#' @noRd
+mixed_compare <- function(values, cmp) {
+  best <- NULL
+  for (v in values) {
+    res <- cmp(v)
+    if (isTRUE(res$agree)) return(res)
+    if (is.null(best) || isTRUE((res$score %||% 0) > (best$score %||% 0))) best <- res
+  }
+  best
+}
+
 #' @keywords internal
 #' @noRd
 cell_value <- function(df, i, field) {
@@ -444,7 +469,7 @@ empty_cells <- function() {
     gold_value = character(), ai_original = character(),
     gold_original = character(), state = character(), rung = character(),
     score = numeric(), rationale = character(), pending = logical(),
-    overridden = logical()
+    overridden = logical(), mixed = logical()
   )
 }
 

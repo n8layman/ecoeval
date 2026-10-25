@@ -74,6 +74,7 @@ server <- function(input, output, session) {
   rv$judge_mode <- args$judge_mode %||% "default"
   rv$judge <- args$judge
   rv$evidence_col <- launch_evidence(args$evidence_col)
+  rv$rollup <- launch_rollup(args)
 
   restored <- NULL
   if (!is.null(args$run_config)) {
@@ -94,6 +95,7 @@ server <- function(input, output, session) {
       # And the supporting-sentence columns, for any side the launch did not
       # name.
       rv$evidence_col <- launch_evidence(args$evidence_col, rv$config$evidence_col)
+      rv$rollup <- launch_rollup(args, rv$config$rollup)
       showNotification("Restored the previous run.", type = "message")
     }, error = function(e) {
       showNotification(paste("Could not read the run configuration:",

@@ -176,6 +176,14 @@ reference:
       - granularity_check
       - identifiability_check
 
+  - title: Rolling up the extraction
+    desc: >
+      For an extraction that records papers in more detail than the reference:
+      group its rows within each paper and add up quantities before matching.
+    contents:
+      - rollup_extraction
+      - suggest_rollup
+
   - title: Metrics
     desc: >
       One unified accounting over every record from both sides, matched or not.

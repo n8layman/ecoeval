@@ -11,7 +11,8 @@ bundle_readme(
   corrections = NULL,
   agg = NULL,
   rm_ = NULL,
-  labels = current_labels()
+  labels = current_labels(),
+  rollup = NULL
 )
 }
 \arguments{
@@ -28,6 +29,9 @@ bundle_readme(
 \item{rm_}{A tibble from \code{\link[=record_metrics]{record_metrics()}}.}
 
 \item{labels}{Side labels; see \code{\link[=side_labels]{side_labels()}}.}
+
+\item{rollup}{The extraction's roll-up when it was on: a list with \code{by} and
+\code{sum}, or \code{NULL}.}
 }
 \value{
 A character vector of lines.

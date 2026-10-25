@@ -17,7 +17,9 @@ score_evaluation(
   norm_cache = NULL,
   rejected = NULL,
   added = NULL,
-  overrides = NULL
+  overrides = NULL,
+  rollup_by = NULL,
+  rollup_sum = NULL
 )
 }
 \arguments{
@@ -41,12 +43,21 @@ rung. \code{NULL} also turns off the built-in LLM normaliser.}
 \item{judge_cache, norm_cache}{Caches from \code{\link[=new_cache]{new_cache()}}.}
 
 \item{rejected, added, overrides}{Manual link and cell decisions.}
+
+\item{rollup_by, rollup_sum}{Roll up the extraction before matching: the
+fields to group its records by within each paper, and the numeric fields
+to add up. See \code{\link[=rollup_extraction]{rollup_extraction()}}. \code{NULL} keeps its records as they are.}
 }
 \value{
 A list with \code{ai}, \code{gold} (canonical and normalised), \code{ai_shown},
 \code{gold_shown} (canonical, as read), \code{conformance}, \code{collapses}, \code{pairs},
-\code{cells}. The cells carry each side's value as read in \code{ai_original} and
-\code{gold_original}; \code{ai_value} and \code{gold_value} are what was compared.
+\code{cells}, \code{rollup}, and \code{rollup_suggestion}. The cells carry each side's
+value as read in \code{ai_original} and \code{gold_original}; \code{ai_value} and
+\code{gold_value} are what was compared. \code{rollup} is \code{NULL}, or a list with
+\code{by}, \code{sum}, \code{members} (a tibble of each rolled-up row's \code{.rid} and the
+extraction \code{.rid}s it holds), and \code{records} (the extraction's records as
+read, before the roll-up). \code{rollup_suggestion} is the result of
+\code{\link[=suggest_rollup]{suggest_rollup()}} on the extraction as it was read.
 }
 \description{
 Records are re-read from \code{loaded} under the configured mapping, so this

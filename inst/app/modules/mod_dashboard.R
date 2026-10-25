@@ -160,6 +160,12 @@ mod_dashboard_server <- function(id, rv) {
                         sprintf("%d matched, %d %s only", r$tp, r$fn, lab()$gold)),
             figure_tile(fmt_pct(r$f1), "Record F1", NULL)),
         div(class = "eco-panel", style = "margin-top:14px;",
+            if (!is.null(rv$rollup_members))
+              div(class = "eco-status", style = "margin-bottom:6px;",
+                  sprintf("%s is rolled up by %s: %d records counted as %d rows.",
+                          lab()$ai, paste(rv$rollup$by, collapse = " + "),
+                          sum(lengths(rv$rollup_members$members)),
+                          nrow(rv$rollup_members))),
             div(class = "eco-status",
                 sprintf("%d of %d papers judged · %d reviewed",
                         prog$n_judged, prog$n_papers, prog$n_reviewed),
@@ -428,7 +434,8 @@ mod_dashboard_server <- function(id, rv) {
         gold_fields = setdiff(names(rv$gold_raw), rv$gold_paper_key$columns),
         collapses = rv$collapses,
         dropped_fields = dropped_fields(rv),
-        linkage_fields = identity_fields(rv)
+        linkage_fields = identity_fields(rv),
+        rollup_suggestion = if (is.null(rv$rollup_members)) rv$rollup_suggestion
       )
     })
 
@@ -505,6 +512,7 @@ mod_dashboard_server <- function(id, rv) {
         rejected = rv$rejected, added = rv$added, overrides = rv$overrides,
         cache = rv$judge_cache, norm_cache = rv$norm_cache,
         reviewed = rv$reviewed, scope = rv$scope, labels = lab(),
+        rollup = rv$rollup,
         evidence_col = evidence_cols(rv),
         metrics = list(
           overall_accuracy = agg()$overall_accuracy,

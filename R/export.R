@@ -116,11 +116,13 @@ confusion_wide <- function(m) {
 #' @param agg A tibble from [aggregate_metrics()].
 #' @param rm_ A tibble from [record_metrics()].
 #' @param labels Side labels; see [side_labels()].
+#' @param rollup The extraction's roll-up when it was on: a list with `by` and
+#'   `sum`, or `NULL`.
 #' @return A character vector of lines.
 #' @export
 bundle_readme <- function(scope, warnings = character(0), progress = NULL,
                           corrections = NULL, agg = NULL, rm_ = NULL,
-                          labels = current_labels()) {
+                          labels = current_labels(), rollup = NULL) {
   labels <- as_side_labels(labels)
   lines <- c(
     "ecoeval evaluation run",
@@ -145,6 +147,14 @@ bundle_readme <- function(scope, warnings = character(0), progress = NULL,
     "  Only papers both sides cover are compared. The rest are left out",
     "  and do not count against either side."
   )
+  if (length(rollup$by)) {
+    lines <- c(lines, "", "ROLL-UP",
+      sprintf("  %s was rolled up by %s before matching%s.", labels$ai,
+              paste(rollup$by, collapse = " + "),
+              if (length(rollup$sum))
+                paste0(", adding up ", paste(rollup$sum, collapse = " + ")) else ""),
+      "  The numbers count the rolled-up rows.")
+  }
   if (!is.null(agg) && nrow(agg)) {
     lines <- c(lines, "", "HEADLINE NUMBERS",
       sprintf("  Overall accuracy (all cells)        %s", pct(agg$overall_accuracy)),
@@ -248,7 +258,8 @@ export_bundle <- function(dir = NULL, cells, pairs, config,
 
   writeLines(
     bundle_readme(scope, warnings, progress, corrections,
-                  aggregate_metrics(cells), record_metrics(pairs), labels),
+                  aggregate_metrics(cells), record_metrics(pairs), labels,
+                  rollup = if (isTRUE(config$rollup$on)) config$rollup),
     fs::path(dir, "README.txt")
   )
   invisible(dir)

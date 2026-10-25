@@ -40,6 +40,8 @@ new_run_config <- function() {
     # Each side's supporting-sentence column, NA for none; see
     # evidence_columns().
     evidence_col = NULL,
+    # The extraction's roll-up, list(by, sum, on); see rollup_extraction().
+    rollup = NULL,
     inputs = list(
       ai = NULL, ai_table = NULL, ai_paper_key = NULL,
       gold = NULL, gold_table = NULL, gold_paper_key = NULL,
@@ -163,6 +165,12 @@ normalise_run_config <- function(cfg) {
   } else {
     cfg$side_labels <- NULL
   }
+  if (length(cfg$rollup)) {
+    cfg$rollup <- list(by = chr(cfg$rollup$by), sum = chr(cfg$rollup$sum),
+                       on = !isFALSE(unlist(cfg$rollup$on)))
+  } else {
+    cfg$rollup <- NULL
+  }
   # A side saved as null had no supporting-sentence column.
   if (length(cfg$evidence_col)) {
     ev <- lapply(cfg$evidence_col, function(v) as.character(unlist(v))[1L])
@@ -188,6 +196,8 @@ normalise_run_config <- function(cfg) {
 #' @param labels Side labels to record with the run; see [side_labels()].
 #' @param evidence_col Each side's supporting-sentence column, from
 #'   [evidence_columns()].
+#' @param rollup The extraction's roll-up: a list with `by`, `sum`, and `on`
+#'   (whether it was switched on).
 #'
 #' @return The updated configuration list.
 #' @export
@@ -203,7 +213,8 @@ capture_run_config <- function(config,
                                scope = NULL,
                                metrics = NULL,
                                labels = NULL,
-                               evidence_col = NULL) {
+                               evidence_col = NULL,
+                               rollup = NULL) {
   if (!is.null(comparators)) {
     config$comparators <- df_to_rows(comparators)
     config$linkage_fields <- comparators$field[comparators$linkage]
@@ -220,6 +231,10 @@ capture_run_config <- function(config,
   if (!is.null(labels)) config$side_labels <- unclass(as_side_labels(labels))
   # A list, not a named vector: jsonlite writes a named vector as an array.
   if (!is.null(evidence_col)) config$evidence_col <- as.list(evidence_col)
+  if (!is.null(rollup)) {
+    config$rollup <- list(by = as.character(rollup$by), sum = as.character(rollup$sum),
+                          on = !isFALSE(rollup$on))
+  }
   config
 }
 

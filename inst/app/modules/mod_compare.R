@@ -43,15 +43,25 @@ record_quote <- function(raw, rid, col) {
   if (isTRUE(ecoeval::is_blank(value))) NA_character_ else value
 }
 
+# The quotes of several records -- the members of a rolled-up row -- in
+# order, without repeats. NA when none of them quoted anything.
+records_quote <- function(raw, rids, col) {
+  q <- vapply(rids, function(r) record_quote(raw, r, col), character(1),
+              USE.NAMES = FALSE)
+  q <- unique(q[!is.na(q)])
+  if (length(q)) q else NA_character_
+}
+
 # Both sides' quotes for one pair, with which sides have a quote column at all
 # and which were named one their records do not have. `cols` is an
-# evidence_columns() result; found by name when NULL.
+# evidence_columns() result; found by name when NULL. `ai_rid` may name
+# several records, for a rolled-up row.
 pair_quotes <- function(ai_raw, gold_raw, ai_rid, gold_rid, cols = NULL) {
   cols <- cols %||% ecoeval::evidence_columns(NULL, names(ai_raw), names(gold_raw))
   sides <- c(ai = !is.null(ai_raw), gold = !is.null(gold_raw)) & !is.na(cols)
   found <- c(ai = isTRUE(cols[["ai"]] %in% names(ai_raw)),
              gold = isTRUE(cols[["gold"]] %in% names(gold_raw)))
-  list(ai = record_quote(ai_raw, ai_rid, cols[["ai"]]),
+  list(ai = records_quote(ai_raw, ai_rid, cols[["ai"]]),
        gold = record_quote(gold_raw, gold_rid, cols[["gold"]]),
        sides = sides, missing = sides & !found, cols = cols)
 }
@@ -89,10 +99,28 @@ quote_html <- function(text) {
 #
 # `quotes` is a pair_quotes() result. Without one, the quotes come from the
 # `evidence` column among the scored cells, when there is one.
+# What a rolled-up extraction row was made from: how many records, and each
+# one's value for this column. `members` is the granular records behind the
+# row, as read.
+members_block <- function(members, field) {
+  vals <- if (field %in% names(members)) {
+    vapply(seq_len(nrow(members)), function(i) {
+      v <- members[[field]][[i]]
+      v <- as.character(unlist(v))
+      v <- v[!is.na(v)]
+      if (length(v)) paste(v, collapse = "; ") else NA_character_
+    }, character(1))
+  } else rep(NA_character_, nrow(members))
+  shown <- ifelse(is.na(vals), "\u2014", vals)
+  div(class = "eco-modal-value",
+      div(class = "k", sprintf("Rolled up from %d %s records", nrow(members), lab()$ai)),
+      div(class = "eco-status", paste(shown, collapse = " \u00b7 ")))
+}
+
 cell_modal_body <- function(cells, pair_id, field, evidence = NA_character_,
                             config = NULL, violations = character(0),
                             label = NULL, kind = NULL, quotes = NULL,
-                            judge_mode = "default") {
+                            judge_mode = "default", members = NULL) {
   row <- cells[cells$pair_id == pair_id & cells$field == field, , drop = FALSE]
   if (!nrow(row)) {
     return(div(class = "eco-note", "That cell is no longer in the comparison."))
@@ -161,6 +189,7 @@ cell_modal_body <- function(cells, pair_id, field, evidence = NA_character_,
                 if (length(kind)) ecoeval::record_kind_label(kind[[1L]]) else "",
                 if (length(label)) label[[1L]] else "")),
     value_block(lab()$ai, original(row, "ai"), row$ai_value),
+    if (!is.null(members)) members_block(members, field),
     value_block(lab()$gold, original(row, "gold"), row$gold_value),
     if (!is.null(quotes)) tagList(side_quotes("ai"), side_quotes("gold")),
     div(class = "eco-status", tags$strong("How they were compared: "),
@@ -195,6 +224,7 @@ mod_compare_ui <- function(id) {
             "Click any tile for both values, the sentences each side quoted,",
             "and what decided it.")
       ),
+      uiOutput(ns("rollup_bar")),
       uiOutput(ns("row_filters")),
       uiOutput(ns("row_count")),
       uiOutput(ns("heatmap_ui")),
@@ -272,6 +302,52 @@ mod_compare_server <- function(id, rv) {
     }
     observeEvent(input$prev, step(-1L))
     observeEvent(input$nxt, step(1L))
+
+    # ---- the roll-up ---------------------------------------------------------
+    # Switches the extraction between its own rows and rolled up to the
+    # reference's grain, rescoring either way. With no roll-up set but one
+    # suggested, offers it.
+    output$rollup_bar <- renderUI({
+      r <- rv$rollup
+      s <- rv$rollup_suggestion
+      if (length(r$by)) {
+        what <- paste0("Roll up ", lab()$ai, " by ", paste(r$by, collapse = " + "),
+                       if (length(r$sum)) paste0(", adding up ", paste(r$sum, collapse = " + ")))
+        div(class = "eco-row-filters",
+            checkboxInput(ns("rollup_on"), what, isTRUE(r$on)),
+            if (isTRUE(r$on) && !is.null(rv$rollup_members))
+              span(class = "eco-status",
+                   sprintf("%d records in %d rows",
+                           sum(lengths(rv$rollup_members$members)),
+                           nrow(rv$rollup_members))))
+      } else if (length(s$by)) {
+        div(class = "eco-status", style = "margin-bottom:6px;",
+            tags$strong("Suggested roll-up: "), s$summary, " ",
+            actionLink(ns("rollup_take"), "Roll up"))
+      }
+    })
+
+    rescore_rollup <- function() {
+      res <- withProgress(message = "Aligning and scoring", value = 0.3,
+                          tryCatch(score_now(rv, rv$comparators), error = function(e) e))
+      if (inherits(res, "error")) {
+        showNotification(conditionMessage(res), type = "error", duration = NULL)
+        return(invisible(NULL))
+      }
+      apply_scored(rv, res, rv$comparators)
+    }
+    observeEvent(input$rollup_on, {
+      if (identical(isTRUE(input$rollup_on), isTRUE(rv$rollup$on))) return()
+      r <- rv$rollup
+      r$on <- isTRUE(input$rollup_on)
+      rv$rollup <- r
+      rescore_rollup()
+    })
+    observeEvent(input$rollup_take, {
+      s <- rv$rollup_suggestion
+      rv$rollup <- list(by = s$by, sum = s$sum %||% character(0), on = TRUE)
+      rescore_rollup()
+    })
 
     # ---- row filters -------------------------------------------------------
     # View-only: a hidden row is still scored, counted, and exported. The
@@ -500,8 +576,10 @@ mod_compare_server <- function(id, rv) {
         cell_modal_body(
           rv$cells, sc$pair_id, sc$field,
           evidence = ecoeval::evidence_field(unique(rv$cells$field)),
-          quotes = pair_quotes(rv$ai_raw, rv$gold_raw, row$ai_rid, row$gold_rid,
+          quotes = pair_quotes(rv$ai_raw, rv$gold_raw,
+                               member_rids(rv, row$ai_rid), row$gold_rid,
                                evidence_cols(rv)),
+          members = member_records(rv, row$ai_rid),
           config = rv$comparators, violations = violation_keys(rv),
           judge_mode = rv$judge_mode,
           label = unique(as.character(d$label[d$pair_id == sc$pair_id])),
