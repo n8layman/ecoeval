@@ -781,3 +781,35 @@ test_that("the launch's evidence columns win over a restored run's, side by side
   # Nothing named and nothing saved: both found by name.
   expect_equal(launch_evidence(list()), list(ai = NULL, gold = NULL))
 })
+
+test_that("row filters narrow the grid, say how many rows are hidden, and leave the scoring alone", {
+  skip_without_app()
+  rv <- scored_state()
+  # A paper holding both matched and unmatched records.
+  mixed <- shiny::isolate(intersect(rv$pairs$paper[rv$pairs$kind == "pair"],
+                                    rv$pairs$paper[rv$pairs$kind != "pair"]))
+  shiny::isolate(rv$current_paper <- mixed[[1L]])
+  cells_before <- shiny::isolate(rv$cells)
+  shiny::testServer(mod_compare_server, args = list(id = "compare", rv = rv), {
+    total <- length(unique(heat_all()$pair_id))
+    # Unfiltered until someone narrows it.
+    expect_equal(length(unique(heat()$pair_id)), total)
+    expect_match(as.character(output$row_count$html),
+                 sprintf("Showing all %d rows", total))
+
+    session$setInputs(f_matched = FALSE)
+    expect_false(any(heat()$kind == "matched"))
+    shown <- length(unique(heat()$pair_id))
+    expect_lt(shown, total)
+    expect_match(as.character(output$row_count$html),
+                 sprintf("Showing %d of %d rows", shown, total))
+    expect_match(as.character(output$row_count$html), "Show all")
+
+    session$setInputs(f_ai_only = FALSE, f_gold_only = FALSE)
+    expect_equal(nrow(heat()), 0L)
+    expect_match(as.character(output$heatmap_ui$html), "match the filters")
+
+    # View-only: nothing scored has changed.
+    expect_identical(rv$cells, cells_before)
+  })
+})

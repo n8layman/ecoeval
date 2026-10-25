@@ -686,6 +686,45 @@ record_field_outcomes <- function(cells, paper, fields = NULL,
   dplyr::arrange(out, match(.data$pair_id, ids), .data$field)
 }
 
+#' Narrow a paper's grid to the rows worth looking at
+#'
+#' View-only: a row left out is still scored, still in the metrics, and still
+#' in the export. Rows are kept or dropped whole -- every tile of a record, or
+#' none -- and each filter narrows what the others leave.
+#'
+#' @param outcomes A tibble from [record_field_outcomes()].
+#' @param kinds The record kinds to keep, of `"matched"`, `"AI only"`, and
+#'   `"gold only"`. `NULL` keeps all three.
+#' @param hide_agreeing Leave out rows where every cell agrees or is blank on
+#'   both sides. A row with a schema violation is kept regardless.
+#' @param violations The `pair_id`s with a value that fails schema validation.
+#' @param pairs When not `NULL`, keep only these `pair_id`s -- the suspect
+#'   links from [suspect_pairs()], say.
+#' @param text Keep rows where a value on either side contains this text,
+#'   ignoring case. `""` keeps every row.
+#' @return `outcomes` without the rows left out.
+#' @export
+filter_record_rows <- function(outcomes, kinds = NULL, hide_agreeing = FALSE,
+                               violations = character(0), pairs = NULL,
+                               text = "") {
+  keep <- rep(TRUE, nrow(outcomes))
+  if (!is.null(kinds)) keep <- keep & outcomes$kind %in% kinds
+  if (!is.null(pairs)) keep <- keep & outcomes$pair_id %in% pairs
+  if (isTRUE(hide_agreeing)) {
+    open <- outcomes$pair_id[!outcomes$state %in% c("agree", "blank")]
+    keep <- keep & outcomes$pair_id %in% c(open, violations)
+  }
+  text <- tolower(trimws(text %||% ""))
+  if (nzchar(text)) {
+    cols <- c("label", "ai_value", "gold_value", "ai_original", "gold_original")
+    hit <- Reduce(`|`, lapply(cols, function(col) {
+      grepl(text, tolower(outcomes[[col]]), fixed = TRUE)
+    }))
+    keep <- keep & outcomes$pair_id %in% outcomes$pair_id[hit]
+  }
+  outcomes[keep, , drop = FALSE]
+}
+
 #' Pairings that look wrong
 #'
 #' Two cheap signals, both strong. A pair that agrees on **nothing** is almost

@@ -1,3 +1,18 @@
+# ecoeval 0.5.0
+
+* The comparison view has row filters (#30), so a long paper can be narrowed
+  to the rows that need attention: which kinds of row to show (matched pairs,
+  Extraction only, Reference only), "Hide rows where everything agrees" (a row
+  with a schema violation stays), "Only links that look wrong" (the pairs
+  `suspect_pairs()` flags), and a search for rows containing a value on either
+  side.
+* Filters are view-only: hidden rows are still scored, and the metrics,
+  confusion matrix, and export are unchanged. "Showing 12 of 64 rows" says how
+  many are hidden, with a one-click "Show all". The filters stay set as you
+  move between papers, and are not saved with the run.
+* `filter_record_rows()` does the filtering over a
+  `record_field_outcomes()` table.
+
 # ecoeval 0.4.0
 
 * `run_eval_app(evidence_col = )` names the column holding the supporting

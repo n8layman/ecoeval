@@ -195,6 +195,8 @@ mod_compare_ui <- function(id) {
             "Click any tile for both values, the sentences each side quoted,",
             "and what decided it.")
       ),
+      uiOutput(ns("row_filters")),
+      uiOutput(ns("row_count")),
       uiOutput(ns("heatmap_ui")),
       div(class = "eco-note", style = "margin-top:6px;",
           span(class = "sw",
@@ -276,26 +278,96 @@ mod_compare_server <- function(id, rv) {
     observeEvent(input$prev, step(-1L))
     observeEvent(input$nxt, step(1L))
 
+    # ---- row filters -------------------------------------------------------
+    # View-only: a hidden row is still scored, counted, and exported. The
+    # filters stay set as the reader walks from paper to paper, since what
+    # they are looking for rarely changes with the paper. Rendered once, at
+    # session start, so the side labels a restored run brings are in force.
+    output$row_filters <- renderUI({
+      div(
+        class = "eco-row-filters",
+        checkboxInput(ns("f_matched"), "Matched pairs", TRUE),
+        checkboxInput(ns("f_ai_only"), ecoeval::record_kind_label("AI only"), TRUE),
+        checkboxInput(ns("f_gold_only"), ecoeval::record_kind_label("gold only"), TRUE),
+        span(class = "eco-filter-gap"),
+        checkboxInput(ns("f_hide_agree"), "Hide rows where everything agrees", FALSE),
+        checkboxInput(ns("f_suspect"), "Only links that look wrong", FALSE),
+        textInput(ns("f_text"), NULL, placeholder = "Rows containing...")
+      )
+    })
+
+    # A checkbox not drawn yet reads as its default, so the grid is whole
+    # until someone narrows it.
+    ticked <- function(id, default) {
+      v <- input[[id]]
+      if (is.null(v)) default else isTRUE(v)
+    }
+    filter_text <- debounce(reactive(input$f_text %||% ""), 300)
+
+    observeEvent(input$show_all, {
+      for (id in c("f_matched", "f_ai_only", "f_gold_only")) {
+        updateCheckboxInput(session, id, value = TRUE)
+      }
+      updateCheckboxInput(session, "f_hide_agree", value = FALSE)
+      updateCheckboxInput(session, "f_suspect", value = FALSE)
+      updateTextInput(session, "f_text", value = "")
+    })
+
     # ---- the heatmap -------------------------------------------------------
     # One tile per record per column, in the order the comparison produced:
     # matched pairs, then AI-only, then gold-only.
-    heat <- reactive({
+    heat_all <- reactive({
       req(rv$cells, rv$current_paper)
       ecoeval::record_field_outcomes(rv$cells, rv$current_paper,
                                      scored_fields(rv), identity_fields(rv))
     })
 
-    # Cells that fail schema validation, keyed the way the plot marks them.
-    heat_violations <- reactive({
-      d <- heat()
-      if (!nrow(d)) return(character(0))
+    # Which tiles fail schema validation. Worked out over the whole paper, so a
+    # row with a violation survives "hide rows where everything agrees".
+    heat_bad <- reactive({
+      d <- heat_all()
+      if (!nrow(d)) return(logical(0))
       keys <- violation_keys(rv)
-      bad <- vapply(seq_len(nrow(d)), function(i) {
+      vapply(seq_len(nrow(d)), function(i) {
         any(c(paste("ai", d$field[[i]], ecoeval::canonicalise(d$ai_value[[i]])),
               paste("gold", d$field[[i]], ecoeval::canonicalise(d$gold_value[[i]]))) %in%
               keys)
       }, logical(1))
+    })
+
+    # The rows the filters leave.
+    heat <- reactive({
+      d <- heat_all()
+      kinds <- c("matched", "AI only", "gold only")[c(
+        ticked("f_matched", TRUE), ticked("f_ai_only", TRUE), ticked("f_gold_only", TRUE)
+      )]
+      suspect <- if (ticked("f_suspect", FALSE)) {
+        ecoeval::suspect_pairs(rv$cells[rv$cells$paper == rv$current_paper, ],
+                               identity_fields(rv))$pair_id
+      }
+      ecoeval::filter_record_rows(
+        d, kinds = kinds, hide_agreeing = ticked("f_hide_agree", FALSE),
+        violations = unique(d$pair_id[heat_bad()]), pairs = suspect,
+        text = filter_text()
+      )
+    })
+
+    # Cells that fail schema validation, keyed the way the plot marks them.
+    heat_violations <- reactive({
+      d <- heat_all()
+      bad <- heat_bad()
       unique(paste(d$pair_id[bad], d$field[bad]))
+    })
+
+    # Nothing hidden goes unsaid.
+    output$row_count <- renderUI({
+      total <- length(unique(heat_all()$pair_id))
+      shown <- length(unique(heat()$pair_id))
+      if (!total) return(NULL)
+      div(class = "eco-status", style = "margin-bottom:6px;",
+          if (shown == total) sprintf("Showing all %d rows", total)
+          else tagList(sprintf("Showing %d of %d rows · ", shown, total),
+                       actionLink(ns("show_all"), "Show all")))
     })
 
     heat_plot <- function() {
@@ -307,8 +379,11 @@ mod_compare_server <- function(id, rv) {
 
     output$heatmap_ui <- renderUI({
       d <- heat()
-      if (!nrow(d)) {
+      if (!nrow(heat_all())) {
         return(div(class = "eco-note", "Nothing to compare in this paper."))
+      }
+      if (!nrow(d)) {
+        return(div(class = "eco-note", "No rows in this paper match the filters."))
       }
       h <- sprintf("%dpx", 26 * heat_rows() + 300)
       if (nrow(d) <= RECORD_HEATMAP_MAX_TILES) {

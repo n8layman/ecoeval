@@ -308,3 +308,51 @@ test_that("an empty run tallies to zeroes rather than erroring", {
   expect_true(is.na(ct$accuracy))
   expect_true(is.na(ct$f1))
 })
+
+test_that("row filters keep or drop whole records, and narrow together", {
+  fx <- fixture_run()
+  ident <- fx$config$field[fx$config$linkage]
+  fields <- fx$config$field[fx$config$include]
+  r <- record_field_outcomes(fx$cells, fx$scope$papers, fields, ident)
+  rows <- function(x) length(unique(x$pair_id))
+
+  # No filters: nothing changes.
+  expect_identical(filter_record_rows(r), r)
+
+  # By kind.
+  m <- filter_record_rows(r, kinds = "matched")
+  expect_true(all(m$kind == "matched"))
+  expect_equal(rows(m), rows(r[r$kind == "matched", ]))
+  expect_equal(nrow(filter_record_rows(r, kinds = character(0))), 0L)
+
+  # Hiding agreeing rows leaves only rows with something to look at, and
+  # every tile of each row it keeps. Every fixture row exercises a
+  # disagreement, so make one matched pair agree throughout.
+  calm_pair <- unique(r$pair_id[r$kind == "matched"])[[1L]]
+  r$state[r$pair_id == calm_pair] <- "agree"
+  h <- filter_record_rows(r, hide_agreeing = TRUE)
+  open <- tapply(!h$state %in% c("agree", "blank"), h$pair_id, any)
+  expect_true(all(open))
+  expect_equal(nrow(h), rows(h) * length(fields))
+  expect_equal(setdiff(unique(r$pair_id), unique(h$pair_id)), calm_pair)
+  # A schema violation keeps an otherwise agreeing row.
+  expect_true(calm_pair %in%
+                filter_record_rows(r, hide_agreeing = TRUE, violations = calm_pair)$pair_id)
+
+  # Restricting to given pairs, and searching values on either side.
+  one <- unique(r$pair_id)[[2L]]
+  expect_equal(unique(filter_record_rows(r, pairs = one)$pair_id), one)
+  needle <- toupper(r$gold_original[!is.na(r$gold_original)][[1L]])
+  found <- filter_record_rows(r, text = needle)
+  expect_gt(rows(found), 0L)
+  expect_true(all(vapply(split(found, found$pair_id), function(x) {
+    any(grepl(tolower(needle), tolower(c(x$label, x$ai_original, x$gold_original,
+                                         x$ai_value, x$gold_value)), fixed = TRUE))
+  }, logical(1))))
+  expect_equal(nrow(filter_record_rows(r, text = "no value says this")), 0L)
+
+  # Filters narrow together.
+  both <- filter_record_rows(r, kinds = "matched", hide_agreeing = TRUE)
+  expect_true(all(both$kind == "matched"))
+  expect_true(all(both$pair_id %in% h$pair_id))
+})
