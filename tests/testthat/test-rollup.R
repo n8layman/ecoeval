@@ -204,3 +204,42 @@ test_that("the comparison view switches the roll-up on and off", {
     expect_equal(sum(rv$pairs$kind == "ai_only"), 11L)
   })
 })
+
+test_that("any numeric column can be added up, compared or not", {
+  f <- lemis_files()
+  run <- setup_evaluation(f$ai, f$gold, f$schema, paper_key = "doi")
+  cols <- summable_columns(run$loaded$ai_raw, run$config, exclude = "doi")
+  expect_true(all(c("quantity", "declared_value", "permit_qty") %in% cols))
+  expect_false(any(c("species", "port", "size_class", "supporting_text") %in% cols))
+
+  rolled <- setup_evaluation(f$ai, f$gold, f$schema, paper_key = "doi",
+                             rollup_by = c("species", "port"),
+                             rollup_sum = c("quantity", "declared_value", "permit_qty"))
+  sc <- rolled$scored
+  expect_equal(sc$ai$declared_value, c(24, 7))
+  expect_equal(sc$ai$permit_qty, c(120, NA))
+  # Carried to be added up, never scored.
+  expect_false(any(c("declared_value", "permit_qty") %in% sc$cells$field))
+  expect_error(score_evaluation(rolled$loaded, rolled$keys, rolled$config,
+                                rolled$scoped$paper_map, rollup_by = "species",
+                                rollup_sum = "nope", skip = "suggest_rollup"),
+               class = "ecoeval_error")
+})
+
+test_that("the pop-up gets the totals of added-up columns that are not compared", {
+  skip_without_app()
+  f <- lemis_files()
+  rv <- shiny::isolate(new_app_state())
+  shiny::isolate(rv$args <- list(ai = f$ai, gold = f$gold, schema = f$schema,
+                                 paper_key = "doi", skip_setup = TRUE,
+                                 rollup_by = c("species", "port"),
+                                 rollup_sum = c("quantity", "declared_value")))
+  shiny::isolate(rv$rollup <- launch_rollup(rv$args))
+  launch_state(rv)
+  shiny::isolate({
+    expect_true("declared_value" %in% summable_cols(rv))
+    rid <- rv$rollup_members$.rid[[1L]]
+    expect_equal(rollup_totals(rv, rid), c(declared_value = "24"))
+    expect_null(rollup_totals(rv, "g00001"))
+  })
+})

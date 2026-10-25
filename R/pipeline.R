@@ -460,8 +460,11 @@ apply_normalizers <- function(records, config, normalizers = NULL, cache = NULL,
 #' @param judge_cache,norm_cache Caches from [new_cache()].
 #' @param rejected,added,overrides Manual link and cell decisions.
 #' @param rollup_by,rollup_sum Roll up the extraction before matching: the
-#'   fields to group its records by within each paper, and the numeric fields
-#'   to add up. See [rollup_extraction()]. `NULL` keeps its records as they are.
+#'   fields to group its records by within each paper, and the numeric columns
+#'   to add up. A `rollup_sum` column need not be compared: one named by its
+#'   column in the extraction is carried through and added up, but not scored
+#'   (see [summable_columns()]). See [rollup_extraction()]. `NULL` keeps its
+#'   records as they are.
 #'
 #' @return A list with `ai`, `gold` (canonical and normalised), `ai_shown`,
 #'   `gold_shown` (canonical, as read), `conformance`, `collapses`, `pairs`,
@@ -521,6 +524,17 @@ score_evaluation <- function(loaded, keys, config, paper_map,
   # same groups, so the grid still shows what each side said.
   rollup <- NULL
   if (length(rollup_by)) {
+    # Columns added up but not compared ride along from the table as read.
+    extra <- setdiff(rollup_sum, use$field)
+    missing <- setdiff(extra, names(loaded$ai_raw))
+    if (length(missing)) {
+      eco_abort(paste0("Column(s) to add up are not in the extraction: ",
+                       paste(missing, collapse = ", "), "."))
+    }
+    for (col in extra) {
+      ai[[col]] <- loaded$ai_raw[[col]]
+      ai_shown[[col]] <- loaded$ai_raw[[col]]
+    }
     rolled <- rollup_extraction(ai, rollup_by, rollup_sum %||% character(0))
     members <- attr(rolled, "members")
     granular_shown <- ai_shown

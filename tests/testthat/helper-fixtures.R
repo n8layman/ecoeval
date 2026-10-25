@@ -123,7 +123,10 @@ lemis_files <- function(dir = withr::local_tempdir(.local_envir = parent.frame()
     port = "Miami",
     size_class = c(paste("size", 1:12), NA),
     quantity = c(rep(10, 11), 30, 5),
-    supporting_text = c(sprintf("Line %d of the shipment.", 1:12), "Clownfish line.")
+    supporting_text = c(sprintf("Line %d of the shipment.", 1:12), "Clownfish line."),
+    # Numbers the reference has no column for: one numeric, one digits as text.
+    declared_value = c(rep(2, 12), 7),
+    permit_qty = c(rep("10", 12), "")
   )
   gold <- data.frame(
     doi = "10.1/x",

@@ -120,7 +120,8 @@ members_block <- function(members, field) {
 cell_modal_body <- function(cells, pair_id, field, evidence = NA_character_,
                             config = NULL, violations = character(0),
                             label = NULL, kind = NULL, quotes = NULL,
-                            judge_mode = "default", members = NULL) {
+                            judge_mode = "default", members = NULL,
+                            totals = NULL) {
   row <- cells[cells$pair_id == pair_id & cells$field == field, , drop = FALSE]
   if (!nrow(row)) {
     return(div(class = "eco-note", "That cell is no longer in the comparison."))
@@ -190,6 +191,12 @@ cell_modal_body <- function(cells, pair_id, field, evidence = NA_character_,
                 if (length(label)) label[[1L]] else "")),
     value_block(lab()$ai, original(row, "ai"), row$ai_value),
     if (!is.null(members)) members_block(members, field),
+    if (length(totals))
+      div(class = "eco-modal-value",
+          div(class = "k", "Added up, not compared"),
+          div(class = "eco-status",
+              paste(names(totals), ifelse(is.na(totals), "\u2014", totals),
+                    collapse = " \u00b7 "))),
     value_block(lab()$gold, original(row, "gold"), row$gold_value),
     if (!is.null(quotes)) tagList(side_quotes("ai"), side_quotes("gold")),
     div(class = "eco-status", tags$strong("How they were compared: "),
@@ -314,7 +321,7 @@ mod_compare_server <- function(id, rv) {
       cfg <- rv$comparators
       req(cfg)
       fields <- cfg$field[cfg$include]
-      numeric <- cfg$field[cfg$include & cfg$comparator == "numeric"]
+      numeric <- summable_cols(rv, cfg)
       div(
         class = "eco-rollup-bar",
         div(class = "eco-row-filters",
@@ -618,6 +625,7 @@ mod_compare_server <- function(id, rv) {
                                member_rids(rv, row$ai_rid), row$gold_rid,
                                evidence_cols(rv)),
           members = member_records(rv, row$ai_rid),
+          totals = rollup_totals(rv, row$ai_rid),
           config = rv$comparators, violations = violation_keys(rv),
           judge_mode = rv$judge_mode,
           label = unique(as.character(d$label[d$pair_id == sc$pair_id])),

@@ -183,6 +183,7 @@ reference:
     contents:
       - rollup_extraction
       - suggest_rollup
+      - summable_columns
 
   - title: Metrics
     desc: >

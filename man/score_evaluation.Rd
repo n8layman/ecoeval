@@ -45,8 +45,11 @@ rung. \code{NULL} also turns off the built-in LLM normaliser.}
 \item{rejected, added, overrides}{Manual link and cell decisions.}
 
 \item{rollup_by, rollup_sum}{Roll up the extraction before matching: the
-fields to group its records by within each paper, and the numeric fields
-to add up. See \code{\link[=rollup_extraction]{rollup_extraction()}}. \code{NULL} keeps its records as they are.}
+fields to group its records by within each paper, and the numeric columns
+to add up. A \code{rollup_sum} column need not be compared: one named by its
+column in the extraction is carried through and added up, but not scored
+(see \code{\link[=summable_columns]{summable_columns()}}). See \code{\link[=rollup_extraction]{rollup_extraction()}}. \code{NULL} keeps its
+records as they are.}
 }
 \value{
 A list with \code{ai}, \code{gold} (canonical and normalised), \code{ai_shown},

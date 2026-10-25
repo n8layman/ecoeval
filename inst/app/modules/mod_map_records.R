@@ -179,7 +179,7 @@ mod_map_records_server <- function(id, rv) {
     output$rollup_panel <- renderUI({
       cfg <- current_config()
       fields <- cfg$field[cfg$include]
-      numeric <- cfg$field[cfg$include & cfg$comparator == "numeric"]
+      numeric <- summable_cols(rv, cfg)
       s <- rv$rollup_suggestion
       by_now <- isolate(input$rollup_by %||% rv$rollup$by)
       sum_now <- isolate(input$rollup_sum %||% rv$rollup$sum)

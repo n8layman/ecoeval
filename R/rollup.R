@@ -333,3 +333,46 @@ suggest_rollup <- function(ai, gold, fields, numeric_fields = character(0),
   list(by = by, sum = sum, baseline = baseline_matched, candidates = cands,
        summary = summary)
 }
+
+#' Columns the extraction's roll-up can add up
+#'
+#' Every numeric column of the extraction, as in ecoreview: compared fields
+#' whose values are numbers, and columns that are not compared at all, such as
+#' a permitted quantity the reference has no column for. A column counts as
+#' numeric when every non-blank value is a number, so text columns holding
+#' digits qualify. Identifier columns (`id`, or names ending in `_id`) and the
+#' paper key are left out.
+#'
+#' A column that is not compared is carried through the roll-up only to be
+#' added up: its total shows beside a rolled-up row, but it is never scored.
+#'
+#' @param ai_raw The extraction's records as read.
+#' @param config The field configuration, from [configure_fields()], or `NULL`.
+#' @param exclude Further columns to leave out, such as the paper key.
+#' @return A character vector: compared fields by field name, then other
+#'   columns by their name in `ai_raw`.
+#' @export
+summable_columns <- function(ai_raw, config = NULL, exclude = character(0)) {
+  numeric_col <- function(x) {
+    if (is.null(x) || is.list(x) || is.logical(x)) return(FALSE)
+    if (is.numeric(x)) return(any(!is.na(x)))
+    v <- trimws(as.character(x))
+    v <- v[!is.na(v) & nzchar(v)]
+    length(v) > 0L && !anyNA(suppressWarnings(as.numeric(v)))
+  }
+  id_like <- function(x) grepl("(^|_)id$", x, ignore.case = TRUE)
+  compared <- character(0)
+  mapped <- character(0)
+  if (!is.null(config)) {
+    use <- config[config$include, , drop = FALSE]
+    mapped <- stats::na.omit(use$ai_col)
+    keep <- use$comparator == "numeric" |
+      vapply(use$ai_col, function(col) !is.na(col) && numeric_col(ai_raw[[col]]),
+             logical(1))
+    compared <- use$field[keep & !id_like(use$field)]
+  }
+  others <- setdiff(names(ai_raw), c(mapped, exclude))
+  others <- others[!id_like(others)]
+  others <- others[vapply(others, function(col) numeric_col(ai_raw[[col]]), logical(1))]
+  unique(c(compared, others))
+}
