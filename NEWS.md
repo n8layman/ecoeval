@@ -15,7 +15,10 @@
   the numeric fields whose totals match the reference (#39). The suggestion
   appears as a finding, on the field-mapping screen, and above the comparison
   grid with a one-click "Roll up".
-* In the comparison view a tick box switches the roll-up on and off. The cell
+* In the comparison view, as in ecoreview, you pick the fields to group by and
+  the fields to add up, press Apply, and the heatmap rescores at that grain. A
+  tick box switches the roll-up off and on again without losing the fields.
+  The field-mapping screen has the same choices. The cell
   pop-up for a rolled-up row lists each row's value and shows the supporting
   sentences of every row in it. The dashboard and the export README say when
   the numbers count rolled-up rows, and the run configuration saves the

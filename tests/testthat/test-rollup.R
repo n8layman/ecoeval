@@ -193,5 +193,14 @@ test_that("the comparison view switches the roll-up on and off", {
 
     session$setInputs(rollup_on = TRUE)
     expect_equal(sum(rv$pairs$kind == "ai_only"), 0L)
+
+    # Choosing the fields here and pressing Apply rescores at that grain.
+    session$setInputs(rollup_by = "port", rollup_sum = character(0), rollup_apply = 1)
+    expect_equal(rv$rollup$by, "port")
+    expect_equal(nrow(rv$rollup_members), 1L)
+    # Clearing the fields turns the roll-up off.
+    session$setInputs(rollup_by = character(0), rollup_apply = 2)
+    expect_null(rv$rollup_members)
+    expect_equal(sum(rv$pairs$kind == "ai_only"), 11L)
   })
 })

@@ -304,27 +304,46 @@ mod_compare_server <- function(id, rv) {
     observeEvent(input$nxt, step(1L))
 
     # ---- the roll-up ---------------------------------------------------------
-    # Switches the extraction between its own rows and rolled up to the
-    # reference's grain, rescoring either way. With no roll-up set but one
-    # suggested, offers it.
+    # Pick the fields to group the extraction by and the ones to add up, press
+    # Apply, and the grid rescores at that grain. The tick box switches a
+    # roll-up off and on again without losing the fields. Nothing rescores
+    # until Apply, so a half-made selection never triggers a run.
     output$rollup_bar <- renderUI({
       r <- rv$rollup
       s <- rv$rollup_suggestion
-      if (length(r$by)) {
-        what <- paste0("Roll up ", lab()$ai, " by ", paste(r$by, collapse = " + "),
-                       if (length(r$sum)) paste0(", adding up ", paste(r$sum, collapse = " + ")))
+      cfg <- rv$comparators
+      req(cfg)
+      fields <- cfg$field[cfg$include]
+      numeric <- cfg$field[cfg$include & cfg$comparator == "numeric"]
+      div(
+        class = "eco-rollup-bar",
         div(class = "eco-row-filters",
-            checkboxInput(ns("rollup_on"), what, isTRUE(r$on)),
+            if (length(r$by)) {
+              checkboxInput(ns("rollup_on"), paste("Roll up", lab()$ai), isTRUE(r$on))
+            } else {
+              span(class = "eco-filter-label", paste("Roll up", lab()$ai, "by:"))
+            },
+            selectizeInput(ns("rollup_by"), NULL, choices = fields,
+                           selected = intersect(r$by, fields), multiple = TRUE,
+                           width = "260px",
+                           options = list(placeholder = "Group by...")),
+            selectizeInput(ns("rollup_sum"), NULL, choices = numeric,
+                           selected = intersect(r$sum, numeric), multiple = TRUE,
+                           width = "200px",
+                           options = list(placeholder = "Add up...")),
+            actionButton(ns("rollup_apply"), "Apply", class = "btn-sm"),
             if (isTRUE(r$on) && !is.null(rv$rollup_members))
               span(class = "eco-status",
                    sprintf("%d records in %d rows",
                            sum(lengths(rv$rollup_members$members)),
-                           nrow(rv$rollup_members))))
-      } else if (length(s$by)) {
-        div(class = "eco-status", style = "margin-bottom:6px;",
-            tags$strong("Suggested roll-up: "), s$summary, " ",
-            actionLink(ns("rollup_take"), "Roll up"))
-      }
+                           nrow(rv$rollup_members)))),
+        if (length(s$by) && !(isTRUE(r$on) && setequal(r$by, s$by) &&
+                              setequal(r$sum, s$sum %||% character(0)))) {
+          div(class = "eco-status", style = "margin-bottom:6px;",
+              tags$strong("Suggested: "), s$summary, " ",
+              actionLink(ns("rollup_take"), "Use the suggestion"))
+        }
+      )
     })
 
     rescore_rollup <- function() {
@@ -343,10 +362,17 @@ mod_compare_server <- function(id, rv) {
       rv$rollup <- r
       rescore_rollup()
     })
+    observeEvent(input$rollup_apply, {
+      by <- as.character(input$rollup_by %||% character(0))
+      rv$rollup <- list(by = by, sum = setdiff(as.character(input$rollup_sum %||% character(0)), by),
+                        on = length(by) > 0L)
+      rescore_rollup()
+    })
+    # Fills the boxes in; Apply still runs it, so the suggestion can be edited.
     observeEvent(input$rollup_take, {
       s <- rv$rollup_suggestion
-      rv$rollup <- list(by = s$by, sum = s$sum %||% character(0), on = TRUE)
-      rescore_rollup()
+      updateSelectizeInput(session, "rollup_by", selected = s$by)
+      updateSelectizeInput(session, "rollup_sum", selected = s$sum %||% character(0))
     })
 
     # ---- row filters -------------------------------------------------------
