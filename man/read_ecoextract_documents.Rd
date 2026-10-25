@@ -13,8 +13,7 @@ read_ecoextract_documents(path)
 A tibble, or \code{NULL} when the database has no documents table.
 }
 \description{
-For an ecoextract database the paper list is free -- it is the \code{documents}
-table, which knows every paper processed regardless of whether extraction
-produced records. That is what lets the evaluation see papers the AI opened
-and found nothing in.
+Read from the database's \code{documents} table, which lists every paper
+processed, whether or not extraction produced records. That lets the
+evaluation include papers where the AI found nothing.
 }

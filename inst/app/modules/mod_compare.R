@@ -198,12 +198,7 @@ mod_compare_ui <- function(id) {
       uiOutput(ns("row_filters")),
       uiOutput(ns("row_count")),
       uiOutput(ns("heatmap_ui")),
-      div(class = "eco-note", style = "margin-top:6px;",
-          span(class = "sw",
-               style = "background:#fff; outline:2px solid #d9534f; outline-offset:-2px; margin-right:6px;"),
-          "A dot marks a value that fails schema validation. Validity is",
-          "orthogonal to agreement -- a cell can be both -- so fill carries",
-          "agreement and the marker carries validity.")
+      uiOutput(ns("dot_note"))
     ),
     uiOutput(ns("link_panel"))
   )
@@ -384,6 +379,15 @@ mod_compare_server <- function(id, rv) {
       unique(paste(d$pair_id[bad], d$field[bad]))
     })
 
+    # Explains the dots, on a paper that has any.
+    output$dot_note <- renderUI({
+      if (!length(heat_violations())) return(NULL)
+      div(class = "eco-note", style = "margin-top:6px;",
+          span(class = "sw",
+               style = "background:#fff; outline:2px solid #d9534f; outline-offset:-2px; margin-right:6px;"),
+          "A dot marks a value the schema does not allow.")
+    })
+
     # Nothing hidden goes unsaid.
     output$row_count <- renderUI({
       total <- length(unique(heat_all()$pair_id))
@@ -554,14 +558,8 @@ mod_compare_server <- function(id, rv) {
       ai_only <- pp$pair_id[pp$kind == "ai_only"]
       gold_only <- pp$pair_id[pp$kind == "gold_only"]
       if (!length(ai_only) || !length(gold_only)) {
-        return(eco_panel(
-          "Linking",
-          paste("Linking matters more than rejecting: rejection can only make",
-                "the alignment sparser, and the pairs a matcher misses are",
-                "exactly the ones whose identifiers disagree -- the ones a",
-                "human can recognise as the same record."),
-          div(class = "eco-status",
-              "This paper has no unpaired rows left on both sides.")))
+        # Nothing to link without an unpaired record on each side.
+        return(NULL)
       }
       label_for <- function(ids, side) {
         cells <- paper_cells()
@@ -574,10 +572,10 @@ mod_compare_server <- function(id, rv) {
       }
       eco_panel(
         "Link two unpaired records",
-        paste("The pairs a matcher misses are exactly the ones whose",
-              "identifiers disagree, and those are the ones a human can",
-              "recognise as the same record. Without manual linking you could",
-              "only correct in one direction."),
+        paste("If an", lab()$ai, "only record and a", lab()$gold, "only record",
+              "are the same record, pick both and press Link. The matcher misses",
+              "pairs like these when their identifying values are written",
+              "differently."),
         fluidRow(
           column(5, selectInput(ns("link_ai"), paste(lab()$ai, "only row"),
                                 choices = label_for(ai_only, "ai"), width = "100%")),

@@ -6,9 +6,9 @@ test_that("every input format the app accepts round-trips", {
 })
 
 test_that("an unreadable path fails with a clear message", {
-  expect_error(read_table_any("no/such/file.csv"), "File not found")
+  expect_error(read_table_any("no/such/file.csv"), "no/such/file.csv", fixed = TRUE)
   tmp <- tempfile(fileext = ".docx"); file.create(tmp)
-  expect_error(read_table_any(tmp), "Unsupported file type")
+  expect_error(read_table_any(tmp), class = "ecoeval_error")
 })
 
 test_that("the largest table is the record table in an ecoextract database", {
@@ -18,7 +18,8 @@ test_that("the largest table is the record table in an ecoextract database", {
 })
 
 test_that("naming a table that is not there says which ones are", {
-  expect_error(read_table_any(fixture("ai_records.db"), "nope"), "Available")
+  # The message lists the tables there are.
+  expect_error(read_table_any(fixture("ai_records.db"), "nope"), "records", fixed = TRUE)
 })
 
 test_that("the AI paper list comes free from the documents table", {
@@ -84,6 +85,9 @@ test_that("the coverage warning fires only on a lopsided pairing", {
   fx <- fixture_run()
   expect_null(coverage_warning(TRUE, TRUE, fx$scope))
   expect_null(coverage_warning(FALSE, FALSE, fx$scope))
-  expect_match(coverage_warning(FALSE, TRUE, fx$scope), "over-extraction")
-  expect_match(coverage_warning(TRUE, FALSE, fx$scope), "under-extraction")
+  one_way <- coverage_warning(FALSE, TRUE, fx$scope)
+  other_way <- coverage_warning(TRUE, FALSE, fx$scope)
+  expect_type(one_way, "character")
+  expect_type(other_way, "character")
+  expect_false(identical(one_way, other_way))
 })

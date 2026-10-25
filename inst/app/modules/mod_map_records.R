@@ -153,10 +153,10 @@ mod_map_records_server <- function(id, rv) {
       by_field <- split(conf, conf$field)
       eco_panel(
         "Schema conformance",
-        paste("Nothing here is adjusted for in the metrics. A value recurring",
-              "many times is a category the schema is missing; a single one is",
-              "a typo. The counts make the difference obvious, and the two",
-              "have opposite fixes."),
+        paste("Values the schema does not allow, with how often each appears.",
+              "A value that appears many times probably needs adding to the",
+              "schema; one that appears once is probably a typo. The metrics",
+              "count these values as they are."),
         lapply(names(by_field), function(f) {
           d <- by_field[[f]]
           tagList(
@@ -213,9 +213,9 @@ mod_map_records_server <- function(id, rv) {
       if (!length(fuzzy) || is.null(rv$pairs)) return(NULL)
       eco_panel(
         "Where to put the cutoff",
-        paste("The distribution of similarity across this column's actual",
-              "pairs, so the cutoff is placed by looking at your own data",
-              "rather than guessing."),
+        paste("How similar this column's values are across the matched pairs.",
+              "Use it to choose the similarity a pair needs to count as a",
+              "match."),
         selectInput(ns("threshold_field"), NULL, choices = fuzzy, width = "320px"),
         plotOutput(ns("threshold_plot"), height = "260px")
       )
@@ -237,10 +237,9 @@ mod_map_records_server <- function(id, rv) {
       if (is.null(g) || !nrow(g)) return(NULL)
       eco_panel(
         "Granularity",
-        paste("Gold records that collapse together on the identity columns.",
-              "If many do, the two datasets disagree about what a record is --",
-              "the human distinguished records by something the key does not",
-              "capture. Add a field to the identity columns and try again."),
+        paste(lab()$gold, "records that share the same identity column values.",
+              "If there are many, the identity columns are not enough to tell",
+              "records apart. Add another identity column and try again."),
         tags$pre(class = "eco-status",
                  paste(sprintf("  %-28s %d records share one key", g$paper, g$n),
                        collapse = "\n"))

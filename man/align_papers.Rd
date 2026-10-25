@@ -20,9 +20,8 @@ A tibble with \code{ai_paper}, \code{gold_paper}, \code{posterior}, \code{matche
 \code{accepted}.
 }
 \description{
-Paper alignment determines scope, not score. Its asymmetry is worth knowing:
-a missed paper match just shrinks the evaluation set, but a wrong paper
-match compares one paper's records against another's and produces garbage.
-So every paper is offered its most likely partner, and only the confident
-links are accepted without a human looking.
+Paper links decide which papers are compared. A missed link only leaves a
+paper out, but a wrong link compares one paper's records against another's,
+which makes its numbers meaningless. So every paper is offered its most
+likely partner, and only confident links are accepted without review.
 }

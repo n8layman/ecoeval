@@ -1,3 +1,14 @@
+# ecoeval 0.5.1
+
+* Plainer wording across the app, the findings, the export README, the help
+  pages, the README, and the vignettes. Notes on screen now say what a panel
+  shows and what to do, and the design reasoning has moved out of the
+  interface.
+* The note about schema-violation dots appears only on a paper that has one.
+* The Linking panel is hidden when a paper has nothing to link.
+* Tests no longer check the wording of messages. Tests that only checked prose
+  were removed, and the rest check values, flags, and counts.
+
 # ecoeval 0.5.0
 
 * The comparison view has row filters (#30), so a long paper can be narrowed

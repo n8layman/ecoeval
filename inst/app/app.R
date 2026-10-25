@@ -168,8 +168,8 @@ server <- function(input, output, session) {
                 length(rv$scope$gold_only), paste(lab()$gold, "only"))
       ),
       div(class = "eco-note",
-          "Papers are a filter, not a scored entity. Papers outside the",
-          "intersection are excluded, never penalised.")
+          "Only papers both sides cover are compared. The rest are left",
+          "out and do not count against either side.")
     )
   })
 

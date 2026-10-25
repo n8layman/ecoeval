@@ -82,10 +82,9 @@ read_db_table <- function(path, table = NULL) {
 
 #' The AI paper list from an ecoextract database
 #'
-#' For an ecoextract database the paper list is free -- it is the `documents`
-#' table, which knows every paper processed regardless of whether extraction
-#' produced records. That is what lets the evaluation see papers the AI opened
-#' and found nothing in.
+#' Read from the database's `documents` table, which lists every paper
+#' processed, whether or not extraction produced records. That lets the
+#' evaluation include papers where the AI found nothing.
 #'
 #' @param path Path to a `.db` file.
 #' @return A tibble, or `NULL` when the database has no documents table.
@@ -229,8 +228,8 @@ paper_set <- function(records, papers = NULL) {
 
 #' Scope: the papers present in both sources
 #'
-#' Papers are a filter, not a scored entity. Papers outside the intersection
-#' are excluded, never penalised.
+#' Only papers both sides cover are compared. Papers outside that set are
+#' left out and do not count against either side.
 #'
 #' @param ai_papers,gold_papers Character vectors from [paper_set()].
 #' @return A list with `papers` (the intersection), `ai_only`, `gold_only`.
@@ -245,10 +244,10 @@ compute_scope <- function(ai_papers, gold_papers) {
 
 #' The lopsided-coverage warning
 #'
-#' Paper lists widen scope; they do not change how anything is scored. Only a
-#' lopsided pairing needs a warning -- when exactly one side supplies a list,
-#' coverage is wider in one direction than the other, so quantify it. The
-#' warning is self-extinguishing: it disappears once both lists are present.
+#' Paper lists add papers to the comparison without changing how anything is
+#' scored. When only one side supplies a list, papers where one side found
+#' nothing are handled differently for each side, so this warning gives the
+#' numbers. It goes away once both lists are supplied.
 #'
 #' @param have_ai_list,have_gold_list Whether each source supplied a paper list.
 #' @param scope The result of [compute_scope()].
@@ -256,19 +255,19 @@ compute_scope <- function(ai_papers, gold_papers) {
 #' @export
 coverage_warning <- function(have_ai_list, have_gold_list, scope) {
   if (have_ai_list == have_gold_list) return(NULL)
+  l <- current_labels()
   if (!have_ai_list) {
     sprintf(paste0(
-      "The AI has no paper list, so %d papers where it produced records but ",
-      "the gold standard has none are outside scope, while papers it ",
-      "processed and found nothing in are not visible at all. Coverage is ",
-      "wider for over-extraction than under-extraction."
-    ), length(scope$ai_only))
+      "%1$s has no paper list, so papers where it found nothing are left ",
+      "out. %3$d papers where it found records and %2$s has none are also ",
+      "left out. Extra records are easier to spot than missing ones."
+    ), l$ai, l$gold, length(scope$ai_only))
   } else {
     sprintf(paste0(
-      "The gold standard has no paper list, so papers a reviewer read and ",
-      "found nothing in are invisible, while %d papers the AI processed ",
-      "without producing records are. Coverage is wider for under-extraction ",
-      "than over-extraction."
-    ), length(scope$ai_only))
+      "%2$s has no paper list, so papers a reviewer read and found nothing ",
+      "in are left out, while %3$d papers %1$s processed without finding ",
+      "records are included. Missing records are easier to spot than extra ",
+      "ones."
+    ), l$ai, l$gold, length(scope$ai_only))
   }
 }

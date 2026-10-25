@@ -106,7 +106,8 @@ test_that("a judge that errors degrades to a disagreement, not a crash", {
   judge <- function(field, a, b) stop("no network")
   res <- compare_pair("x y", "y z q", "judge", judge = judge)
   expect_false(res$agree)
-  expect_match(res$rationale, "judge failed")
+  # The judge's own error is kept as the reason.
+  expect_match(res$rationale, "no network", fixed = TRUE)
 })
 
 test_that("score_cells labels every state the grid and the metrics rely on", {

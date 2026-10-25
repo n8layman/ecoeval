@@ -15,8 +15,8 @@ coverage_warning(have_ai_list, have_gold_list, scope)
 A character scalar, or \code{NULL} when no warning is warranted.
 }
 \description{
-Paper lists widen scope; they do not change how anything is scored. Only a
-lopsided pairing needs a warning -- when exactly one side supplies a list,
-coverage is wider in one direction than the other, so quantify it. The
-warning is self-extinguishing: it disappears once both lists are present.
+Paper lists add papers to the comparison without changing how anything is
+scored. When only one side supplies a list, papers where one side found
+nothing are handled differently for each side, so this warning gives the
+numbers. It goes away once both lists are supplied.
 }

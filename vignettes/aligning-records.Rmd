@@ -16,18 +16,18 @@ library(ecoeval)
 ex <- function(f) system.file("extdata", f, package = "ecoeval")
 ```
 
-Before any accuracy number means anything, we have to decide which AI row
-corresponds to which gold row. That is the core of the app, and it is why the
-human stays in the loop: a person looking at two rows side by side can tell they
-describe the same interaction even when the text doesn't match. An automated
-matcher often can't.
+Before any accuracy number can be computed, ecoeval has to decide which AI row
+corresponds to which gold row. A person looking at two rows side by side can
+often tell they describe the same interaction even when the text doesn't match,
+where an automated matcher can't. That's why the app lets you review and correct
+the pairings.
 
-## Scope: papers are a filter, not a scored entity
+## Which papers are compared
 
-**Papers: intersection. Records: union.** Scope is the papers present in both
-paper sets — each source's paper list when supplied, otherwise the papers
-appearing in its records. Within those papers, every record from both sides
-appears; some pair up, some don't.
+ecoeval compares the papers both sides have, and within those papers every
+record from both sides. Each side's papers come from its paper list when one is
+supplied, and otherwise from the papers its records mention. Within the compared
+papers, some records pair up and some don't.
 
 ```{r}
 schema <- read_schema(ex("schema.json"))
@@ -41,19 +41,21 @@ scope <- compute_scope(paper_set(ai, ai_papers), paper_set(gold, gold_papers))
 lengths(scope)
 ```
 
-Papers outside the intersection are excluded, never penalised. A gold-only paper
-simply narrows the comparison set; it carries no warning.
+Papers only one side has are left out and don't count against either side. A
+paper only the gold standard has just isn't compared, and gets no warning.
 
-Paper alignment determines scope, not score. Its asymmetry is worth knowing: a
-*missed* paper match just shrinks the evaluation set, but a *wrong* paper match
-compares one paper's records against another's and produces garbage. That's what
-the paper-link review guards against.
+Paper links decide which papers are compared; they don't affect the scores
+directly. The two kinds of mistake have different costs. A *missed* paper link
+only leaves that paper out. A *wrong* paper link compares one paper's records
+against another's, so every number for it is meaningless. The paper-link review
+is there to catch wrong links.
 
-## The comparator cascade
+## How two values are compared
 
-Comparison is a ladder, not a single test: **exact → normalized → fuzzy → LLM
-judge**. Each rung sees only what the previous couldn't resolve, so the
-expensive rungs run on a small minority of cells.
+Each pair of values goes through a series of steps, **exact → normalized →
+fuzzy → AI reviewer**, and each step only sees the values the step before it
+couldn't match. So the slower, more expensive steps only run on a small share of
+cells.
 
 ```{r}
 compare_pair("predation", "predation", "fuzzy")$rung
@@ -61,95 +63,96 @@ compare_pair("Predation ", "predation", "fuzzy")$rung
 compare_pair("Myotis lucifugus", "Myotis lucifigus", "fuzzy")$rung
 ```
 
-A field's configured comparator names the **highest** rung the cascade may climb
-to, so it can't quietly accept more than you asked for:
+A field's comparison setting is the **last** step it may reach, so a field set
+to exact matching never accepts a fuzzy match:
 
 ```{r}
 compare_pair("Predation", "predation", "exact")$agree
 compare_pair("Myotis lucifugus", "Myotis lucifigus", "normalized")$agree
 ```
 
-Defaults come from the JSON Schema type — the only inference available without
-domain knowledge, and enough:
+The defaults come from each field's type in the JSON Schema:
 
 ```{r}
 schema$fields[, c("field", "type", "comparator")]
 ```
 
-Without normalisation the first run is a wall of disagreement that is mostly
-formatting noise. Two of the defaults exist purely to absorb it:
+Without normalisation, the first run shows a lot of disagreements that are
+really just formatting. Two of the defaults handle that:
 
 ```{r}
 compare_pair("10", "10.0", "numeric")$agree
 compare_pair("2021-03-08", "08/03/2021", "date")$agree
 ```
 
-That second one matters more than it looks. `strptime()` happily ignores
-trailing characters, so a naive parser reads `"05/01/2020"` under `"%Y/%m/%d"`
-as the year 5. `parse_date_loose()` accepts a format only when the parsed date
-round-trips back to the original text.
+Dates need care. `strptime()` ignores trailing characters, so a simple parser
+reads `"05/01/2020"` under `"%Y/%m/%d"` as the year 5. `parse_date_loose()` only
+accepts a format when the parsed date converts back to the original text.
 
-## Two LLM-backed strategies, for different columns
+## Two ways of using an LLM, for different columns
 
-|                            | Mechanism                              | Cache key    | Best for                   |
-| -------------------------- | -------------------------------------- | ------------ | -------------------------- |
-| **Normalize-then-compare** | map both values to a canonical form    | per **value** | species names              |
-| **LLM judge**              | compare the pair, return verdict + why | per **pair**  | supporting sentences, prose |
+|                            | How it works                           | Cached per   | Best for                    |
+| -------------------------- | -------------------------------------- | ------------ | --------------------------- |
+| **Normalize, then compare** | convert both values to a standard form | **value**    | species names               |
+| **AI reviewer**            | read the pair, return a verdict and why | **pair**    | supporting sentences, prose |
 
-The judge **cannot move earlier** in the pipeline. Alignment evaluates every
-candidate pair within a paper — 5 AI records against 5 gold records is 25 pairs
-times N linkage fields of LLM calls just to build the comparison matrix.
-Normalisation is per value: 10 values, 10 calls, then compare cheaply.
-Normalisation scales to N; the judge would scale to N².
+The AI reviewer runs after matching, never before it. Matching considers every
+possible pair within a paper: 5 AI records against 5 gold records is 25 pairs,
+times the number of linkage fields, in LLM calls. Normalisation works per value:
+10 values take 10 calls, and the comparisons after that are cheap. So
+normalisation grows with the number of values, and running the reviewer during
+matching would grow with the square of it.
 
 So the order is:
 
-1. Pick linkage fields and comparators
-2. **Normalise the linkage fields** on both sides — per value, cached, a no-op
-   when no normalising comparator was assigned
+1. Pick linkage fields and comparisons
+2. **Normalise the linkage fields** on both sides, per value and cached. This
+   does nothing if no field uses a normalising comparison
 3. Run the matcher on the normalised values
-4. Score cells with the cheap rungs; the judge fires per paper, on paired rows
-   only, and only on cells the cheaper rungs couldn't resolve
+4. Score the cells with the plain comparisons. The AI reviewer then runs per
+   paper, on paired records only, for the cells the plain comparisons couldn't
+   settle
 
-Two consequences: **display originals, compare normalised**, and **the collapse
-check runs on normalised values** — `"M. lucifugus"` and `"Myotis lucifugus"`
-should collapse together, and running it raw undercounts.
+Two things follow from that order. The app **shows the original values and
+compares the normalised ones**. And **the granularity check uses normalised
+values**, so `"M. lucifugus"` and `"Myotis lucifugus"` count as the same.
 
-With no API key configured, the judge rung reports its cells as *pending* rather
-than pretending to a verdict:
+With no API key set up, cells that need the AI reviewer are marked as *pending*
+instead of getting a verdict:
 
 ```{r}
 res <- compare_pair("bats ate moths", "moths were taken by bats", "judge")
 c(agree = res$agree, rung = res$rung, pending = res$pending)
 ```
 
-Verdicts are cached per pair, because LLM output varies between calls and a
-reproducible run needs them frozen rather than re-derived. The cache is written
-into `run_config.json`.
+Verdicts are cached per pair and saved in `run_config.json`. An LLM can answer
+differently each time it's asked, so saving the verdicts keeps a run
+reproducible.
 
 ## The matcher
 
-Blocked per paper, 1:1, and **linked only when the model thinks it more likely
-than not**. Gold standards hold rows the extraction missed, and extractions hold
-rows the gold standard does not. Pairing a leftover gold row with whatever AI
-row is free in the same paper would hide a missed record inside a
-"disagreement", so a pair is linked only when its identity columns make that
-case. What the matcher leaves apart, you can link by hand; what it joins wrongly,
-you can reject.
+The matcher works one paper at a time, pairs each record with at most one
+record on the other side, and **only links two records when it judges that more
+likely than not**. Gold standards hold records the extraction missed, and
+extractions hold records the gold standard doesn't have. If a leftover gold
+record were paired with whatever AI record was free in the same paper, a missed
+record would show up as a disagreement. So two records are only linked when
+their identity columns support it. You can link records the matcher left apart,
+and reject links it got wrong.
 
 Each identity column of a candidate pair is scored *agree*, *close*, or
-*differ* by string similarity, and a Fellegi-Sunter model says how much each
-outcome counts for or against the two rows being the same record. Agreeing on
-a species binomial is strong evidence, because two different records rarely
-share one by chance; agreeing on an interaction type with four possible values
-is weak evidence, because they often do.
+*differ* by string similarity, and a Fellegi-Sunter model weighs each result
+for or against the two rows being the same record. Agreeing on a species name
+is strong evidence, because two different records rarely share one by chance.
+Agreeing on an interaction type with four possible values is weak evidence,
+because different records often do.
 
-A paper holds a handful of records — far too few to learn that from — so the
-model is fitted **once over every scoped record** and applied per paper. How
+A single paper has too few records to learn those weights from, so the model is
+fitted **once across all compared records** and then applied paper by paper. How
 often two different records agree by chance is learned from pairs in
-*different* papers, which certainly are not the same record. How often the same
-record agrees with itself is learned from the within-paper pairs, held near a
-prior so that a small corpus cannot talk the model into nonsense.
+*different* papers, which can't be the same record. How often a record agrees
+with itself is learned from pairs within a paper, kept close to a starting
+estimate so that a small dataset can't push the model to extreme values.
 
 ```{r}
 config  <- default_comparator_config(schema)
@@ -163,27 +166,28 @@ pairs <- align_records(ai, gold, linkage, paper_map)
 table(pairs$kind)
 ```
 
-`min_posterior` on `align_records()` sets how sure a link must be; the default
-is 0.5.
+`min_posterior` on `align_records()` sets how sure the matcher must be to link
+two records. The default is 0.5.
 
-**Matching is 1:1.** Leftovers on either side are false positives and false
-negatives, because that is what they are. An extra AI record *is* a false
-positive; whether it came from a hallucination or a dedup failure is a diagnosis
-you make from the collapse warning, not something the metric needs to model.
+**Each record is paired at most once.** Records left over on either side count
+as false positives and false negatives. An extra AI record counts as a false
+positive whether it came from a hallucination or a deduplication failure. To
+tell which, look at the granularity warning.
 
-## The three operations
+## The three manual corrections
 
-At the **row** level you fix the pairing — reject a link, or link two orphans.
-At the **cell** level you fix the verdict — assert that two values really do mean
-the same thing, or really don't.
+For **rows**, you can fix the pairing: reject a link, or link two unpaired
+records. For **cells**, you can fix the verdict: say that two values mean the
+same thing, or that they don't.
 
-**Linking matters more than rejecting.** Rejection can only make the alignment
-sparser. The pairs a matcher misses are exactly the ones whose identifiers
-disagree — and those are the ones a human can recognise as the same entity.
-Without manual linking you could only correct in one direction.
+Linking two unpaired records is the correction you'll need most. The matcher
+tends to miss pairs whose identifying values are written differently, and a
+person can usually recognise those as the same record. Rejecting a link can
+only remove pairs, so without manual linking you couldn't add the pairs the
+matcher missed.
 
-All three recompute every metric immediately, and all three persist in
-`run_config.json`. A hand-tuned result should say so:
+All three update every metric straight away and are saved in
+`run_config.json`. The app also shows how many corrections were made by hand:
 
 ```{r}
 correction_count(
@@ -195,31 +199,31 @@ correction_count(
 
 ## When to review by hand
 
-You don't have to check its work row by row. But a batch pass knows which pairs
-look wrong, which turns "review all 47 papers or none" into "look at these
-three":
+You don't have to check every row. After a full scoring run, ecoeval can list
+the pairs that look wrong, so you can review a few papers instead of all of
+them:
 
 ```{r}
 cells <- score_cells(pairs, ai, gold, config)
 suspect_pairs(cells, linkage)
 ```
 
-Two cheap signals, both strong. A pair that agrees on **nothing** is almost
-certainly two unrelated records the matcher joined. A pair that disagrees on
-every **identity column** is the subtler case: it may agree on incidentals like
-country and year while the fields that establish which record this actually *is*
-all disagree.
+A pair is listed in two cases. If it agrees on **nothing**, it's almost
+certainly two unrelated records the matcher joined. If it disagrees on every
+**identity column**, it may still agree on other columns like country and year,
+but the columns that say which record it is all disagree.
 
-## Granularity: do the two datasets agree what a record is?
+## Granularity: do the two datasets split records the same way?
 
-Group the gold records by the chosen linkage fields within each paper and count
-collapses. If many rows collapse together, the human distinguished records by
-something the key doesn't capture.
+ecoeval groups the gold records in each paper by the chosen linkage fields and
+counts groups with more than one record. If many records share the same
+values, the person who made the gold standard split records by something the
+linkage fields don't include.
 
 ```{r}
 granularity_check(gold, linkage, "gold")
 ```
 
-Two gold rows in that paper differ only by year, which isn't in the identity
-key. Add a field and try again — or accept that the two datasets are counting
-different things, which is itself a finding.
+The two gold records in that paper differ only by year, and year isn't a
+linkage field. Add a linkage field and try again, or treat it as a finding: the
+two datasets split records differently.

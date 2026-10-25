@@ -15,6 +15,6 @@ write_run_config(config, path)
 \code{path}, invisibly.
 }
 \description{
-Reload it and you are exactly where you were -- manual link decisions and
-cached LLM verdicts included. It is also what the run-over-run diff reads.
+Holds what is needed to restore the run, including manual link decisions
+and AI reviewer verdicts. \code{\link[=diff_runs]{diff_runs()}} compares two of them.
 }

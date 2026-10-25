@@ -27,11 +27,10 @@ the share of that paper's cells that agree, and the counts behind it.
 \details{
 A tile covers every row of that paper's comparison for that column -- a
 matched AI-and-gold pair is one row, an unmatched record from either side is
-one row -- so it usually summarises several cells. That is exactly why the
-overview cannot use the four outcome colours: they describe \strong{one cell}, and
-a tile holding nine agreements and one disagreement would paint the same as
-one holding ten disagreements. \code{agreement} is what aggregates honestly, and
-\code{outcome} is kept only for the tiles where every cell says the same thing.
+one row -- so it usually summarises several cells. The four outcome colours
+describe one cell each, so the overview shades tiles by \code{agreement} instead.
+\code{outcome} is filled in only for tiles where every cell has the same
+outcome.
 
 \code{agreement} is \code{n_agree / n_scored}, the same definition as
 \code{\link[=field_metrics]{field_metrics()}}'s accuracy, so the map and the numbers under it cannot

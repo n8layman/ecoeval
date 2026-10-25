@@ -142,8 +142,8 @@ bundle_readme <- function(scope, warnings = character(0), progress = NULL,
     sprintf("  %4d papers %s -- excluded", length(scope$ai_only), side_only(labels, "ai")),
     sprintf("  %4d papers %s -- excluded", length(scope$gold_only), side_only(labels, "gold")),
     "",
-    "  Papers are a filter, not a scored entity. Papers outside the",
-    "  intersection are excluded, never penalised."
+    "  Only papers both sides cover are compared. The rest are left out",
+    "  and do not count against either side."
   )
   if (!is.null(agg) && nrow(agg)) {
     lines <- c(lines, "", "HEADLINE NUMBERS",
@@ -161,7 +161,7 @@ bundle_readme <- function(scope, warnings = character(0), progress = NULL,
               progress$n_judged, progress$n_papers, progress$n_reviewed))
     if (progress$n_pending_cells > 0L) {
       lines <- c(lines, sprintf(
-        "  %d cells are still waiting for the AI reviewer -- only the plain comparisons ran on them.",
+        "  %d cells are still waiting for the AI reviewer. Only the plain comparisons ran on them.",
         progress$n_pending_cells))
     }
   }

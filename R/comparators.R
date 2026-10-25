@@ -265,8 +265,9 @@ cmp_result <- function(agree, rung, score = NA_real_, rationale = NA_character_,
 
 #' Look a judge verdict up in the cache, calling the judge on a miss
 #'
-#' LLM output varies between calls, so a reproducible run needs verdicts frozen
-#' rather than re-derived. The cache is written out with `run_config.json`.
+#' An LLM can answer differently each time it is asked, so verdicts are saved
+#' and reused to keep a run reproducible. The cache is saved in
+#' `run_config.json`.
 #'
 #' @inheritParams compare_pair
 #' @param a,b Canonical string forms of the two values.
@@ -397,8 +398,8 @@ score_cells <- function(pairs, ai, gold, config,
 
 #' Apply manual cell overrides
 #'
-#' An LLM verdict is a proposal; the human has the last word, and every
-#' override is recorded rather than silently applied.
+#' A person's decision replaces the AI reviewer's verdict for that cell, and
+#' each override is recorded in the run.
 #'
 #' @param cells A cell tibble from [score_cells()].
 #' @param overrides A tibble with `pair_id`, `field`, `agree`.
@@ -449,8 +450,7 @@ empty_cells <- function() {
 
 #' Similarity scores across a column's actual candidate pairs
 #'
-#' Feeds the threshold-picking chart: the user places a fuzzy cutoff by looking
-#' at the distribution over their own data rather than guessing.
+#' Feeds the chart for choosing a fuzzy cutoff from the data.
 #'
 #' @param pairs,ai,gold As in [score_cells()].
 #' @param field The field to profile.

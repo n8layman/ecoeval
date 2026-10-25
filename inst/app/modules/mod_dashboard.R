@@ -71,20 +71,13 @@ mod_dashboard_ui <- function(id) {
     uiOutput(ns("resolve_panel")),
     eco_panel(
       "Every paper, every column",
-      paste("The whole run in one picture. Rows are papers, columns are the",
-            "gold standard's columns, and a tile is that paper's records for",
-            "that column, shaded by how much of it agrees -- dark where the",
-            "two sides match on everything, pale where they match on little.",
-            "It shades a rate rather than one of the four outcome colours",
-            "because a tile covers several records, and those colours describe",
-            "a single cell; they are exact one paper at a time, which is what",
-            "clicking a tile opens. Both axes are sorted worst first: a pale",
-            "vertical band is a column that fails everywhere, usually a",
-            "comparator or schema problem; a pale horizontal one is a paper",
-            "that fails everywhere, usually a bad alignment. Hover a tile for",
-            "what is behind it, counted in rows of that paper's comparison --",
-            "a matched pair is one row, an unmatched record is one row. Click",
-            "a column name to narrow everything below to that column."),
+      paste("Rows are papers and columns are fields. Each tile is shaded by",
+            "how many of that paper's values agree for that field: dark when",
+            "they all agree, pale when few do. The worst papers and fields come",
+            "first. A pale column usually means its comparison or schema needs",
+            "changing; a pale row usually means the paper's records were",
+            "paired wrongly. Hover a tile for its counts, click it to open that",
+            "paper, or click a field name to show only that field below."),
       uiOutput(ns("heatmap_ui")),
       uiOutput(ns("confusion_matrix")),
       div(style = "margin-top:8px;",
@@ -92,20 +85,19 @@ mod_dashboard_ui <- function(id) {
     ),
     eco_panel(
       "Column accuracy, worst first",
-      paste("The triage view -- but read it carefully. A column that is",
-            "uniformly wrong has three possible causes and this chart cannot",
-            "tell them apart: a misconfigured comparator, an ambiguous field",
-            "description, or the model genuinely failing. Check them in that",
-            "order."),
+      paste("If a column is wrong almost everywhere, check these in order:",
+            "how the column is compared, then the field's description in the",
+            "schema, then the model itself. This chart cannot tell which it",
+            "is."),
       plotOutput(ns("column_accuracy"), height = "auto"),
       div(style = "margin-top:8px;",
           downloadButton(ns("dl_column_accuracy"), "Download PNG", class = "btn-sm"))
     ),
     eco_panel(
       "Per-column detail",
-      paste("The form adapts to the column: a true K-by-K for an enum, a",
-            "presence-absence split into correct and wrong value for free",
-            "text, and an error distribution for numbers."),
+      paste("For a column with a fixed list of values, a table of each value",
+            "against each value. For free text, whether each side has a value",
+            "and whether it is right. For numbers, how far off the values are."),
       selectInput(ns("column"), NULL, choices = NULL, width = "340px"),
       uiOutput(ns("column_notes")),
       plotly::plotlyOutput(ns("confusion_interactive"), height = "380px"),
@@ -123,18 +115,17 @@ mod_dashboard_ui <- function(id) {
     uiOutput(ns("findings")),
     eco_panel(
       "Compare with a previous run",
-      paste("Without run-over-run comparison, iterating is blind. Load the",
-            "run_config.json from an earlier evaluation to see which numbers",
-            "moved after a schema or prompt change."),
+      paste("Load the run_config.json from an earlier evaluation to see which",
+            "numbers changed after a schema or prompt change."),
       fileInput(ns("previous"), NULL, accept = ".json", width = "420px"),
       uiOutput(ns("diff"))
     ),
     eco_panel(
       "Export",
-      paste("The session artifact and the export bundle are the same object,",
-            "so save, restore, and download share one implementation. Reload",
-            "run_config.json and you are exactly where you were -- manual link",
-            "decisions and cached judge verdicts included."),
+      paste("The bundle holds the tables, metrics, plots, and a",
+            "run_config.json. Pass that file to run_eval_app(run_config = ) to",
+            "pick up where you left off, with your manual links, overrides, and",
+            "AI reviewer verdicts."),
       div(style = "display:flex; gap:10px; flex-wrap:wrap; align-items:center;",
           downloadButton(ns("dl_bundle"), "Download the bundle (.zip)",
                          class = "btn-primary"),
@@ -177,12 +168,10 @@ mod_dashboard_server <- function(id, rv) {
                   span(" · ", ecoeval::correction_count(rv$rejected, rv$added,
                                                         rv$overrides))),
             div(class = "eco-note", style = "margin-top:6px;",
-                paste("Field-level numbers are largely robust to alignment",
-                      "error -- a wrongly paired row that disagrees everywhere",
-                      "scores the same as two unpaired rows. Record-level",
-                      "precision and recall are not, since pairing converts one",
-                      "false positive and one false negative into one true",
-                      "positive.")))
+                paste("A wrong pairing barely moves the field numbers: a pair",
+                      "that disagrees everywhere scores the same as two",
+                      "unpaired records. It does move record precision and",
+                      "recall, because each pairing counts as a found record.")))
       )
     })
 
@@ -194,12 +183,10 @@ mod_dashboard_server <- function(id, rv) {
       tagList(
         if (n > 0L) eco_panel(
           "Resolve all differences",
-          paste("An AI reviewer reads the cells whose wording differs in",
-                "columns set to use it -- paired rows only, and only where the",
-                "plain comparisons could not call it a match.",
-                "Verdicts are cached as they complete, so an interrupted run",
-                "picks up where it stopped, and a reproducible run has them",
-                "frozen rather than re-derived."),
+          paste("An AI reviewer reads the cells the plain comparisons could",
+                "not match, in columns set to use it, for paired records only.",
+                "Each verdict is saved as it arrives, so an interrupted run",
+                "picks up where it stopped and a saved run keeps them."),
           div(class = "eco-status",
               sprintf("%d cells are waiting for the AI reviewer. That is about %d LLM calls.", 
                       sum(rv$cells$pending), n)),
@@ -218,10 +205,9 @@ mod_dashboard_server <- function(id, rv) {
         ),
         if (nrow(susp)) eco_panel(
           "Look at these first",
-          paste("The batch pass knows which pairs disagree on everything, and",
-                "which disagree on every identity column. That is the bridge",
-                "between reading the numbers and reviewing by hand: spend the",
-                "effort only where it is worth spending."),
+          paste("Pairs that disagree on everything, or on every identity",
+                "column, are probably paired wrongly. If you only check a few",
+                "papers by hand, start with these."),
           tags$pre(class = "eco-status",
                    paste(sprintf("  %-28s %s", susp$paper, susp$reason),
                          collapse = "\n")),
@@ -325,13 +311,11 @@ mod_dashboard_server <- function(id, rv) {
                  tags$strong("F1"), " ", fmt_pct(ct$f1)),
             ratio("Accuracy", ct$tp, ct$n_scored, ct$accuracy)),
         div(class = "eco-note", style = "margin-top:6px;",
-            paste("The same colours as the tiles, counted. A disagreement costs",
-                  "a false positive and a false negative, since it asserts a",
-                  "wrong value and misses the right one; a cell neither side",
-                  "filled in is a true negative and drops out of every metric.",
-                  "A tile shows the worst outcome among its rows, so the map",
-                  "above aggregates where these counts do not -- the chart says",
-                  "where to look, the matrix says how much there is."))
+            paste("Each box counts the cells of the matching colour. A",
+                  "disagreement counts as a false positive and a false",
+                  "negative: one side has a wrong value and the right one is",
+                  "missing. A cell neither side filled in is a true negative",
+                  "and is left out of every metric."))
       )
     })
 
@@ -456,13 +440,12 @@ mod_dashboard_server <- function(id, rv) {
       notes <- c(
         schema = "Things to change before the next extraction run.",
         model = "How the model actually did.",
-        gold = "Signs the reference data needs cleaning rather than the schema needs changing."
+        gold = "Problems in the reference data to clean up."
       )
       eco_panel(
         "Findings",
-        paste("Output, not gates. Grouped by who acts on them. Nothing here",
-              "adjusts a metric -- the groups exist so you know where to go",
-              "next."),
+        paste("Grouped by where the fix belongs. None of these change the",
+              "metrics."),
         lapply(names(titles), function(g) {
           d <- f[f$group == g, , drop = FALSE]
           if (!nrow(d)) return(NULL)

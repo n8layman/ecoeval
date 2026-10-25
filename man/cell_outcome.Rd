@@ -14,18 +14,13 @@ A character vector of outcomes: \code{agree}, \code{disagree}, \code{only_gold},
 \code{only_ai}, \code{none}.
 }
 \description{
-Seven cell states, four things a person actually does something about: the
-two sides agree, they conflict, only the gold standard has a value, or only
-the AI does.
+Maps the seven cell states to four outcomes: the two sides agree, they
+differ, only the gold standard has a value, or only the AI does.
 }
 \details{
-Two collapses do the work. Whether a one-sided value came from an unpaired
-record or from a blank in a paired one is a detail of the alignment, not of
-the finding -- both mean "one side has this and the other does not". And a
-column \strong{neither} side filled in is agreement: they agree there is nothing
-there. That keeps the scheme to four colours, and it keeps them honest --
-green means "nothing to fix here", which is exactly what a mutually empty
-column is.
+A value on only one side gets the same outcome whether its record is
+unpaired or its partner left the cell blank. A cell \strong{neither} side filled
+in counts as agreement, so it is green: there is nothing to fix.
 
 Colour is not the accounting. A both-blank cell is still a true negative in
 \code{\link[=state_contributions]{state_contributions()}} and still drops out of accuracy, precision and

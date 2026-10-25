@@ -14,7 +14,7 @@ A tibble with \code{field}, \code{ai_fill}, \code{gold_fill}, \code{gap}, sorted
 largest gap first.
 }
 \description{
-Feeds the completeness chart and the fill-rate asymmetry finding: a field
-humans always populate and the AI rarely does is usually a field-description
-problem, not a model failure.
+Feeds the completeness chart and the fill-rate finding. If humans almost
+always fill in a field and the AI rarely does, the field's description
+usually needs work.
 }

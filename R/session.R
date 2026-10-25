@@ -97,8 +97,8 @@ rows_to_df <- function(rows, proto = NULL) {
 
 #' Write a run configuration to disk
 #'
-#' Reload it and you are exactly where you were -- manual link decisions and
-#' cached LLM verdicts included. It is also what the run-over-run diff reads.
+#' Holds what is needed to restore the run, including manual link decisions
+#' and AI reviewer verdicts. [diff_runs()] compares two of them.
 #'
 #' @param config A run configuration list.
 #' @param path Destination path.

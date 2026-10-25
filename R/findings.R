@@ -52,7 +52,7 @@ collect_findings <- function(cells,
     for (i in seq_len(nrow(gold_enum))) {
       if (gold_enum$n[[i]] < recurring_at) next
       add("schema", sprintf("Recurring %s value outside the schema enum", labels$gold),
-          sprintf("%s: '%s' appears %d times -- a category the schema is missing.",
+          sprintf("%s: '%s' appears %d times. The schema probably needs this value.",
                   gold_enum$field[[i]], gold_enum$value[[i]], gold_enum$n[[i]]),
           gold_enum$n[[i]])
     }
@@ -71,9 +71,9 @@ collect_findings <- function(cells,
   if (!is.null(collapses) && nrow(collapses)) {
     n_papers <- length(unique(collapses$paper))
     add("schema", "Granularity mismatch on the linkage fields",
-        sprintf(paste0("%d record groups across %d papers collapse together on ",
-                       "the chosen linkage fields -- the two datasets disagree ",
-                       "about what one record is."),
+        sprintf(paste0("In %2$d papers, %1$d groups of records share the same ",
+                       "identity column values, so those columns cannot tell ",
+                       "the records apart. Add another identity column."),
                 nrow(collapses), n_papers),
         nrow(collapses))
   }
@@ -82,8 +82,8 @@ collect_findings <- function(cells,
     gap <- fills$gap[[i]]
     if (is.na(gap) || gap < 0.4) next
     add("schema", "Fill-rate asymmetry",
-        sprintf(paste0("%s populates '%s' %.0f%% of the time, %s %.0f%% ",
-                       "-- usually a field-description problem, not a model failure."),
+        sprintf(paste0("%s fills in '%s' %.0f%% of the time, %s %.0f%%. ",
+                       "Check the field's description in the schema first."),
                 labels$gold, fills$field[[i]], 100 * fills$gold_fill[[i]],
                 labels$ai, 100 * fills$ai_fill[[i]]),
         round(100 * gap))
@@ -104,8 +104,8 @@ collect_findings <- function(cells,
     if (nrow(ai_bad)) {
       add("model", sprintf("%s values that violate the schema", labels$ai),
           sprintf(paste0("%d distinct values across %d fields fail enum or type ",
-                         "validation. Structured output should have prevented ",
-                         "this -- it is a pipeline problem as well as an error."),
+                         "validation. Structured output should prevent this, so ",
+                         "check the extraction pipeline too."),
                   nrow(ai_bad), length(unique(ai_bad$field))),
           sum(ai_bad$n))
     }
@@ -124,9 +124,8 @@ collect_findings <- function(cells,
   susp <- suspect_pairs(cells, linkage_fields)
   if (nrow(susp)) {
     add("model", "Pairings that look wrong",
-        sprintf(paste0("%d pairs across %d papers look mispaired (%s). That is ",
-                       "the strongest cheap signal a pairing is wrong -- start ",
-                       "your review there."),
+        sprintf(paste0("%d pairs across %d papers look paired wrongly (%s). ",
+                       "Start your review with these."),
                 nrow(susp), length(unique(susp$paper)),
                 paste(unique(susp$reason), collapse = "; ")),
         nrow(susp))
@@ -138,7 +137,7 @@ collect_findings <- function(cells,
                             conformance$n < recurring_at, , drop = FALSE]
     for (i in seq_len(nrow(oneoff))) {
       add("gold", "One-off value outside the schema",
-          sprintf("%s: '%s' appears %d time(s) -- most likely a typo or format variant.",
+          sprintf("%s: '%s' appears %d time(s). Probably a typo or a different spelling.",
                   oneoff$field[[i]], oneoff$value[[i]], oneoff$n[[i]]),
           oneoff$n[[i]])
     }
@@ -192,9 +191,9 @@ source_consistency <- function(records, papers = NULL, source = "ai") {
     if (length(missing)) {
       add("records_outside_paper_list",
           sprintf(paste0("%d papers have records but do not appear in the paper ",
-                         "list. A review list that omits papers WITH records ",
-                         "cannot be trusted to include papers WITHOUT them -- and ",
-                         "the empty papers are the entire reason the list exists."),
+                         "list. If the list misses papers that have records, it ",
+                         "may also miss papers where nothing was found, which ",
+                         "are what the list is for."),
                   length(missing)),
           length(missing))
     }
@@ -234,9 +233,9 @@ blocking_condition <- function(scope, mapped_fields) {
 
 #' Schema patch proposed by the findings
 #'
-#' Schema findings emit an applicable patch, not prose. This closes the loop
-#' mechanically instead of leaving the user to translate a dashboard into
-#' schema edits by hand.
+#' Turns the schema findings into a list of proposed edits to apply to the
+#' schema: values to add to enums, fields whose descriptions may be unclear,
+#' and identity fields that need another field.
 #'
 #' @param conformance Rows from [check_conformance()].
 #' @param collapses Rows from [granularity_check()].
@@ -263,14 +262,14 @@ schema_patch <- function(conformance, collapses, cells, schema,
   if (!is.null(collapses) && nrow(collapses)) {
     patch[["x-unique-fields"]] <- paste0(
       "Records collapse on the current key in ", length(unique(collapses$paper)),
-      " papers -- the key needs another field to separate them."
+      " papers. Add another field to tell them apart."
     )
   }
   fm <- field_metrics(cells)
   for (i in seq_len(nrow(fm))) {
     if (is.na(fm$accuracy[[i]]) || fm$accuracy[[i]] > 0.5 || fm$n_scored[[i]] < 5L) next
     patch$description_review[[fm$field[[i]]]] <- sprintf(
-      "ambiguous -- %d of %d scored cells disagree",
+      "may be unclear: %d of %d scored cells disagree",
       fm$n_scored[[i]] - fm$tp[[i]], fm$n_scored[[i]]
     )
   }

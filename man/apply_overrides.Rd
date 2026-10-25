@@ -15,6 +15,6 @@ apply_overrides(cells, overrides = NULL)
 \code{cells} with the overridden rows restated.
 }
 \description{
-An LLM verdict is a proposal; the human has the last word, and every
-override is recorded rather than silently applied.
+A person's decision replaces the AI reviewer's verdict for that cell, and
+each override is recorded in the run.
 }

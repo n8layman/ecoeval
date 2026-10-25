@@ -14,15 +14,14 @@ or the schema itself.}
 A character vector of comparator names, one per field.
 }
 \description{
-Type is the only inference available without domain knowledge, and it is
-enough (see \code{DESIGN.md}, "Comparators"). Free text is distinguished from
-short strings by name, because JSON Schema has no way to say "this is prose".
+Chosen from each field's JSON Schema type (see \code{DESIGN.md}, "Comparators").
+Free text is told apart from short strings by the field's name, since JSON
+Schema has no type for prose.
 }
 \details{
-Free text defaults to \code{"judge"}, whose cascade still runs exact, normalized
-and fuzzy first -- so nothing costs money until the cheap rungs have failed,
-and a run with no API key simply reports those cells as unjudged rather than
-scoring reworded prose as wrong. Two records can point at the same fact with
-entirely different text, so string distance is hopeless there and a judge is
-the only sensible comparator.
+Free text defaults to \code{"judge"}. The exact, normalized and fuzzy steps still
+run first, so the AI reviewer only sees what they could not match. Without an
+API key those cells are marked as unjudged. Two records can describe the
+same fact in entirely different words, so string similarity does not work
+for prose.
 }

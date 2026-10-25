@@ -100,9 +100,9 @@ test_that("the evidence column can be named, for both sides or one", {
 })
 
 test_that("a malformed evidence_col is refused", {
-  expect_error(evidence_columns(c("a", "b")), "one per side")
-  expect_error(evidence_columns(c(ai = "a", reference = "b")), "one per side")
-  expect_error(evidence_columns(c(ai = "a", "b")), "one per side")
-  expect_error(evidence_columns(""), "one per side")
-  expect_error(evidence_columns(3), "one per side")
+  expect_error(evidence_columns(c("a", "b")), class = "ecoeval_error")
+  expect_error(evidence_columns(c(ai = "a", reference = "b")), class = "ecoeval_error")
+  expect_error(evidence_columns(c(ai = "a", "b")), class = "ecoeval_error")
+  expect_error(evidence_columns(""), class = "ecoeval_error")
+  expect_error(evidence_columns(3), class = "ecoeval_error")
 })

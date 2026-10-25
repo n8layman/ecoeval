@@ -31,15 +31,13 @@ A list with \code{field}, \code{type} (\code{"class"}, \code{"presence"}, or
 cautions, such as a single class dominating or too few matched records.
 }
 \description{
-The form adapts to the column's type, because a K-by-K matrix over thousands
-of species names is useless:
+The matrix depends on the column's type:
 }
 \details{
 \itemize{
-\item \strong{enum / boolean / low cardinality} -- a true K-by-K, gold class by AI
-class, with an explicit "not in schema" row and column so out-of-enum
-values appear rather than being silently dropped. Those are among the most
-interesting cells on the chart.
+\item \strong{enum / boolean / low cardinality} -- each gold value against each AI
+value, with a "not in schema" row and column so values outside the
+schema's list are shown.
 \item \strong{free text / high cardinality} -- 2-by-2 on presence and absence, with
 the populated-by-both cell split into "correct" and "wrong value". That
 split separates \emph{didn't populate the field} from \emph{populated it wrong},

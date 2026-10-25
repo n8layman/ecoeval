@@ -18,27 +18,22 @@ all of them. The subtitle says when papers were left out.}
 A ggplot.
 }
 \description{
-The overview, and a \strong{summary} rather than a verdict. Rows are papers,
-columns are the gold standard's columns, and every tile is one paper's
-records for one column, shaded by how much of it agrees: dark where the two
-sides match on everything, pale where they match on little, grey where there
+Rows are papers and columns are the gold standard's columns. Each tile
+covers one paper's records for one column and is shaded by how much of it
+agrees: dark when everything agrees, pale when little does, grey when there
 was nothing to score.
 }
 \details{
-It is a rate rather than one of the four outcome colours because a tile
-covers several records, and those colours describe a single cell -- a tile
-holding nine agreements and one disagreement would paint the same as one
-holding ten disagreements. The four colours live in
-\code{\link[=plot_record_heatmap]{plot_record_heatmap()}}, where a tile really is one cell. The rate is the
-same accuracy \code{\link[=field_metrics]{field_metrics()}} reports, computed over that paper's cells for
-that column, so the map and the numbers under it cannot disagree.
+A tile covers several records, so it is shaded by a rate. The four outcome
+colours are used in \code{\link[=plot_record_heatmap]{plot_record_heatmap()}}, where each tile is one cell. The
+rate is the accuracy \code{\link[=field_metrics]{field_metrics()}} reports, computed over that paper's
+cells for that column, so the map matches the numbers.
 
-Both axes are sorted by how much disagrees, worst first. That is the useful
-ordering rather than a cosmetic one: it pulls a column that fails everywhere
-to the left as a pale vertical band and a paper that fails everywhere to the
-top as a pale horizontal one, and those two patterns have different causes --
-a column that is bad across every paper is usually a comparator or a schema
-problem, a paper that is bad across every column is usually a bad alignment.
+Both axes are sorted by how much disagrees, worst first. A column that fails
+in every paper shows as a pale band on the left, and usually means its
+comparison or schema needs changing. A paper that fails in every column shows
+as a pale band at the top, and usually means its records were paired
+wrongly.
 
 Hovering a tile breaks down the rows behind it, where a row is one line of
 that paper's comparison -- a matched pair counts once, an unmatched record

@@ -14,10 +14,9 @@ mod_align_papers_ui <- function(id) {
     uiOutput(ns("summary")),
     eco_panel(
       "Paper links",
-      paste("A missed paper match just shrinks the evaluation set. A wrong one",
-            "compares one paper's records against another's and produces",
-            "garbage -- which is what this review guards against. Untick any",
-            "link that is wrong."),
+      paste("Untick any link that pairs two different papers. A wrong link",
+            "compares one paper's records against another's, so every number",
+            "for it is meaningless. A missed link only leaves that paper out."),
       DT::DTOutput(ns("links")),
       div(style = "margin-top:12px; display:flex; gap:10px; align-items:center;",
           actionButton(ns("accept_all"), "Accept all"),
@@ -78,15 +77,14 @@ mod_align_papers_server <- function(id, rv) {
         if (!have_ai || !have_gold) {
           div(class = "eco-note", style = "margin-top:8px;",
               if (!have_ai && !have_gold)
-                paste("Neither source supplied a paper list, so scope is the",
-                      "papers where both sides found something. A paper someone",
-                      "read and found nothing in looks identical to one they",
-                      "never opened, and drops out. That is self-consistent --",
-                      "the exclusion is symmetric.")
+                paste("Neither side supplied a paper list, so only papers where",
+                      "both sides found something are compared. A paper where",
+                      "one side found nothing is left out, the same way for",
+                      "both sides.")
               else
-                paste("One source supplied a paper list and the other did not,",
-                      "so coverage is wider in one direction than the other.",
-                      "The warning in the sidebar quantifies it."))
+                paste("Only one side supplied a paper list, so papers where one",
+                      "side found nothing are handled differently for each side.",
+                      "The warning in the sidebar gives the numbers."))
         }
       )
     })
@@ -162,7 +160,7 @@ mod_align_papers_server <- function(id, rv) {
       }
       eco_panel(
         "Excluded from scope", 
-        "Excluded, never penalised. They simply narrow the comparison set.",
+        "These papers are left out and do not count against either side.",
         show(rv$scope$ai_only, paste(lab()$ai, "only papers"),
              paste(lab()$gold, "has nothing for them")),
         show(rv$scope$gold_only, paste(lab()$gold, "only papers"),

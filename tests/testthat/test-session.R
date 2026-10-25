@@ -69,7 +69,7 @@ test_that("a configuration from a future format version warns rather than fails"
   cfg$format_version <- 99L
   path <- withr::local_tempfile(fileext = ".json")
   write_run_config(cfg, path)
-  expect_warning(read_run_config(path), "format version")
+  expect_warning(read_run_config(path))
 })
 
 test_that("hand-tuned results say so", {
