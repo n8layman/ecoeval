@@ -395,7 +395,14 @@ mod_compare_server <- function(id, rv) {
         checkboxInput(ns("f_agreeing"), "Rows that fully agree", TRUE),
         span(class = "eco-filter-gap"),
         uiOutput(ns("suspect_button"), inline = TRUE),
-        textInput(ns("f_text"), NULL, placeholder = "Rows containing...")
+        textInput(ns("f_text"), NULL, placeholder = "Rows containing..."),
+        actionButton(ns("f_text_apply"), "Filter", class = "btn-sm"),
+        # Enter in the box filters too. The value travels with the key press,
+        # since the text input sends its own value only after a short pause.
+        tags$script(HTML(sprintf(
+          "$(document).off('keydown.ecoFilter').on('keydown.ecoFilter', '#%s', function(e) {
+             if (e.key === 'Enter') Shiny.setInputValue('%s', this.value, {priority: 'event'});
+           });", ns("f_text"), ns("f_text_enter"))))
       )
     })
 
@@ -427,7 +434,11 @@ mod_compare_server <- function(id, rv) {
       v <- input[[id]]
       if (is.null(v)) default else isTRUE(v)
     }
-    filter_text <- debounce(reactive(input$f_text %||% ""), 300)
+    # The search applies on Enter or the Filter button, not while typing, so
+    # the grid stays put while you read its labels.
+    filter_text <- reactiveVal("")
+    observeEvent(input$f_text_enter, filter_text(input$f_text_enter %||% ""))
+    observeEvent(input$f_text_apply, filter_text(input$f_text %||% ""))
 
     observeEvent(input$show_all, {
       for (id in c("f_matched", "f_ai_only", "f_gold_only")) {
@@ -436,6 +447,7 @@ mod_compare_server <- function(id, rv) {
       updateCheckboxInput(session, "f_agreeing", value = TRUE)
       suspect_only(FALSE)
       updateTextInput(session, "f_text", value = "")
+      filter_text("")
     })
 
     # ---- the heatmap -------------------------------------------------------
