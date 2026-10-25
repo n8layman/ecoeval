@@ -1,3 +1,32 @@
+# ecoeval 0.6.0
+
+* The extraction can be rolled up before matching, for when it records papers
+  in more detail than the reference: twelve rows by size class where the
+  reference has one row with the total (#29). `rollup_by` names the fields to
+  group the extraction's rows by within each paper, and `rollup_sum` the
+  numeric fields to add up, such as a quantity. Only the extraction is rolled
+  up. The grouping rules are copied from ecoreview's `rollup_records()`: a
+  total ignores blanks and is unknown only when every row is blank, and other
+  fields keep each distinct value.
+* A field whose rolled-up rows hold different values agrees with the reference
+  when the reference value is one of them. Such cells are marked `mixed`.
+* `suggest_rollup()` proposes a roll-up when one would pair more reference
+  records: it tries grouping by the identity columns, and suggests adding up
+  the numeric fields whose totals match the reference (#39). The suggestion
+  appears as a finding, on the field-mapping screen, and above the comparison
+  grid with a one-click "Roll up".
+* In the comparison view, as in ecoreview, you pick the fields to group by and
+  the fields to add up, press Apply, and the heatmap rescores at that grain. A
+  tick box switches the roll-up off and on again without losing the fields.
+  The field-mapping screen has the same choices. The cell
+  pop-up for a rolled-up row lists each row's value and shows the supporting
+  sentences of every row in it. The dashboard and the export README say when
+  the numbers count rolled-up rows, and the run configuration saves the
+  roll-up.
+* New arguments `rollup_by` and `rollup_sum` on `run_eval_app()`,
+  `evaluate_extraction()`, `setup_evaluation()`, and `score_evaluation()`, and
+  a new skippable step, `"suggest_rollup"`.
+
 # ecoeval 0.5.1
 
 * Plainer wording across the app, the findings, the export README, the help

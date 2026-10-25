@@ -17,7 +17,8 @@ capture_run_config(
   scope = NULL,
   metrics = NULL,
   labels = NULL,
-  evidence_col = NULL
+  evidence_col = NULL,
+  rollup = NULL
 )
 }
 \arguments{
@@ -43,6 +44,9 @@ capture_run_config(
 
 \item{evidence_col}{Each side's supporting-sentence column, from
 \code{\link[=evidence_columns]{evidence_columns()}}.}
+
+\item{rollup}{The extraction's roll-up: a list with \code{by}, \code{sum}, and \code{on}
+(whether it was switched on).}
 }
 \value{
 The updated configuration list.

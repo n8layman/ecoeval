@@ -28,7 +28,9 @@ setup_evaluation(
   norm_cache = new_cache(),
   rejected = NULL,
   added = NULL,
-  overrides = NULL
+  overrides = NULL,
+  rollup_by = NULL,
+  rollup_sum = NULL
 )
 }
 \arguments{
@@ -94,6 +96,15 @@ supplied rather than opening its screen.}
 \item{judge_cache, norm_cache}{Caches from \code{\link[=new_cache]{new_cache()}}.}
 
 \item{rejected, added, overrides}{Manual link and cell decisions to replay.}
+
+\item{rollup_by, rollup_sum}{Roll up the extraction before it is matched,
+for when it records papers in more detail than the reference -- say twelve
+rows by size class where the reference has one with the total.
+\code{rollup_by} names the fields to group the extraction's records by within
+each paper, and \code{rollup_sum} the numeric fields to add up, such as a
+quantity. The rules are ecoreview's; see \code{\link[=rollup_extraction]{rollup_extraction()}}. Only the
+extraction is rolled up. When these are \code{NULL} the app suggests a roll-up
+if one would pair more records (\code{\link[=suggest_rollup]{suggest_rollup()}}).}
 }
 \value{
 A list with \code{stage} -- the stage reached: \code{"load"}, \code{"metadata"},

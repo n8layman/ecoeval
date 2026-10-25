@@ -27,6 +27,7 @@ mod_map_records_ui <- function(id) {
             "text, then an AI reviewer reading both."),
       div(style = "overflow-x:auto;", uiOutput(ns("config_table"))),
       uiOutput(ns("skip_note")),
+      uiOutput(ns("rollup_panel")),
       div(style = "margin-top:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;",
           actionButton(ns("apply"), "Align records and score", class = "btn-primary"),
           actionButton(ns("reset"), "Reset to schema defaults"),
@@ -171,9 +172,52 @@ mod_map_records_server <- function(id, rv) {
       )
     })
 
+    # ---- rolling up the extraction ---------------------------------------
+    # For an extraction that records papers in more detail than the reference.
+    # The choices are the compared fields; the selection survives the table
+    # above being redrawn.
+    output$rollup_panel <- renderUI({
+      cfg <- current_config()
+      fields <- cfg$field[cfg$include]
+      numeric <- cfg$field[cfg$include & cfg$comparator == "numeric"]
+      s <- rv$rollup_suggestion
+      by_now <- isolate(input$rollup_by %||% rv$rollup$by)
+      sum_now <- isolate(input$rollup_sum %||% rv$rollup$sum)
+      div(
+        class = "eco-rollup", style = "margin-top:14px;",
+        tags$strong(paste("Roll up", lab()$ai)),
+        div(class = "eco-note",
+            "If", lab()$ai, "splits one", lab()$gold, "record into several rows",
+            "(by size class, say), group its rows by the fields below and add up",
+            "quantities before matching.", lab()$gold, "is never rolled up."),
+        if (length(s$by)) {
+          div(class = "eco-status", style = "margin:6px 0;",
+              tags$strong("Suggested: "), s$summary, " ",
+              actionLink(ns("use_suggestion"), "Use the suggestion"))
+        },
+        div(style = "display:flex; gap:14px; flex-wrap:wrap;",
+            selectizeInput(ns("rollup_by"), "Group by", choices = fields,
+                           selected = intersect(by_now, fields), multiple = TRUE,
+                           width = "320px",
+                           options = list(placeholder = "No roll-up")),
+            selectizeInput(ns("rollup_sum"), "Add up", choices = numeric,
+                           selected = intersect(sum_now, numeric), multiple = TRUE,
+                           width = "320px"))
+      )
+    })
+
+    observeEvent(input$use_suggestion, {
+      s <- rv$rollup_suggestion
+      updateSelectizeInput(session, "rollup_by", selected = s$by)
+      updateSelectizeInput(session, "rollup_sum", selected = s$sum)
+    })
+
     # ---- apply --------------------------------------------------------------
     observeEvent(input$apply, {
       cfg <- current_config()
+      rv$rollup <- list(by = as.character(input$rollup_by %||% character(0)),
+                        sum = as.character(input$rollup_sum %||% character(0)),
+                        on = TRUE)
       if (!any(cfg$include)) {
         rv$blocked <- ecoeval::blocking_condition(rv$scope, character(0))
         return(invisible(NULL))
@@ -184,15 +228,7 @@ mod_map_records_server <- function(id, rv) {
       }
 
       res <- withProgress(message = "Aligning and scoring", value = 0.3, {
-        tryCatch(
-          ecoeval::score_evaluation(
-            loaded_inputs(rv), current_keys(rv), cfg, rv$paper_map,
-            normalizers = rv$normalizers, skip = rv$skip, llm = llm_allowed(rv),
-            judge_cache = rv$judge_cache, norm_cache = rv$norm_cache,
-            rejected = rv$rejected, added = rv$added, overrides = rv$overrides
-          ),
-          error = function(e) e
-        )
+        tryCatch(score_now(rv, cfg), error = function(e) e)
       })
       if (inherits(res, "error")) {
         status(conditionMessage(res))

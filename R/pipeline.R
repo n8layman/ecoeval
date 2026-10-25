@@ -24,10 +24,12 @@
 #' * `"conformance"` -- the schema conformance check on both sides.
 #' * `"granularity"` -- the check for gold records that collapse together on
 #'   the identity columns.
+#' * `"suggest_rollup"` -- working out a suggested roll-up of the extraction
+#'   ([suggest_rollup()]).
 #'
 #' @return A character vector of step names.
 #' @export
-skippable_steps <- function() c("normalize", "conformance", "granularity")
+skippable_steps <- function() c("normalize", "conformance", "granularity", "suggest_rollup")
 
 #' @keywords internal
 #' @noRd
@@ -457,17 +459,26 @@ apply_normalizers <- function(records, config, normalizers = NULL, cache = NULL,
 #' @param llm Whether the built-in LLM normaliser may run.
 #' @param judge_cache,norm_cache Caches from [new_cache()].
 #' @param rejected,added,overrides Manual link and cell decisions.
+#' @param rollup_by,rollup_sum Roll up the extraction before matching: the
+#'   fields to group its records by within each paper, and the numeric fields
+#'   to add up. See [rollup_extraction()]. `NULL` keeps its records as they are.
 #'
 #' @return A list with `ai`, `gold` (canonical and normalised), `ai_shown`,
 #'   `gold_shown` (canonical, as read), `conformance`, `collapses`, `pairs`,
-#'   `cells`. The cells carry each side's value as read in `ai_original` and
-#'   `gold_original`; `ai_value` and `gold_value` are what was compared.
+#'   `cells`, `rollup`, and `rollup_suggestion`. The cells carry each side's
+#'   value as read in `ai_original` and `gold_original`; `ai_value` and
+#'   `gold_value` are what was compared. `rollup` is `NULL`, or a list with
+#'   `by`, `sum`, `members` (a tibble of each rolled-up row's `.rid` and the
+#'   extraction `.rid`s it holds), and `records` (the extraction's records as
+#'   read, before the roll-up). `rollup_suggestion` is the result of
+#'   [suggest_rollup()] on the extraction as it was read.
 #' @export
 score_evaluation <- function(loaded, keys, config, paper_map,
                              normalizers = NULL, skip = character(0),
                              judge = NULL, llm = TRUE,
                              judge_cache = NULL, norm_cache = NULL,
-                             rejected = NULL, added = NULL, overrides = NULL) {
+                             rejected = NULL, added = NULL, overrides = NULL,
+                             rollup_by = NULL, rollup_sum = NULL) {
   skip <- check_skip(skip)
   use <- config[config$include, , drop = FALSE]
   if (!nrow(use)) {
@@ -500,6 +511,28 @@ score_evaluation <- function(loaded, keys, config, paper_map,
   collapses <- if ("granularity" %in% skip) NULL else
     granularity_check(gold, linkage, "gold")
 
+  # Worked out on the extraction as read, so it can say whether a roll-up helps
+  # whether or not one is on.
+  suggestion <- if ("suggest_rollup" %in% skip) NULL else
+    suggest_rollup(ai, gold, linkage, use$field[use$comparator == "numeric"],
+                   paper_map)
+
+  # Only the extraction is rolled up. The values as read are rolled up with the
+  # same groups, so the grid still shows what each side said.
+  rollup <- NULL
+  if (length(rollup_by)) {
+    rolled <- rollup_extraction(ai, rollup_by, rollup_sum %||% character(0))
+    members <- attr(rolled, "members")
+    granular_shown <- ai_shown
+    ai_shown <- rollup_extraction(ai_shown, rollup_by, rollup_sum %||% character(0),
+                                  members = members)
+    rollup <- list(by = rollup_by, sum = setdiff(rollup_sum, rollup_by),
+                   members = tibble::tibble(.rid = rolled$.rid,
+                                            members = attr(rolled, "member_rids")),
+                   records = granular_shown)
+    ai <- rolled
+  }
+
   pairs <- align_records(ai, gold, linkage, paper_map,
                          rejected = rejected, added = added)
   cells <- score_cells(pairs, ai, gold, use, judge = judge, cache = judge_cache,
@@ -507,7 +540,7 @@ score_evaluation <- function(loaded, keys, config, paper_map,
                        originals = list(ai = ai_shown, gold = gold_shown))
   list(ai = ai, gold = gold, ai_shown = ai_shown, gold_shown = gold_shown,
        conformance = conformance, collapses = collapses, pairs = pairs,
-       cells = cells)
+       cells = cells, rollup = rollup, rollup_suggestion = suggestion)
 }
 
 #' Run the pipeline as far as its inputs allow
@@ -544,7 +577,8 @@ setup_evaluation <- function(ai = NULL, gold = NULL, schema = NULL,
                              normalizers = NULL, skip = character(0),
                              judge = NULL, llm = TRUE, skip_setup = TRUE,
                              judge_cache = new_cache(), norm_cache = new_cache(),
-                             rejected = NULL, added = NULL, overrides = NULL) {
+                             rejected = NULL, added = NULL, overrides = NULL,
+                             rollup_by = NULL, rollup_sum = NULL) {
   skip <- check_skip(skip)
   if (!is.null(normalizers) &&
       (!is.list(normalizers) || is.null(names(normalizers)) ||
@@ -623,7 +657,8 @@ setup_evaluation <- function(ai = NULL, gold = NULL, schema = NULL,
     loaded, keys, config, scoped$paper_map,
     normalizers = normalizers, skip = skip, judge = judge, llm = llm,
     judge_cache = judge_cache, norm_cache = norm_cache,
-    rejected = rejected, added = added, overrides = overrides
+    rejected = rejected, added = added, overrides = overrides,
+    rollup_by = rollup_by, rollup_sum = rollup_sum
   ))
   if (inherits(scored, "error")) return(stop_at("fields", conditionMessage(scored)))
   out$scored <- scored

@@ -43,6 +43,11 @@ new_app_state <- function() {
     # The supporting-sentence columns named for each side; see
     # launch_evidence().
     evidence_col = list(),
+    # The extraction's roll-up: the fields to group by and add up, and whether
+    # it is switched on. rollup_members and rollup_records hold what the last
+    # scoring rolled up; rollup_suggestion what suggest_rollup() proposed.
+    rollup = list(by = character(0), sum = character(0), on = TRUE),
+    rollup_members = NULL, rollup_records = NULL, rollup_suggestion = NULL,
 
     pairs = NULL, cells = NULL,
     conformance = NULL, collapses = NULL,
@@ -123,6 +128,9 @@ apply_scored <- function(rv, scored, config) {
   rv$cells <- scored$cells
   rv$comparators <- config
   rv$field_seed <- config
+  rv$rollup_members <- scored$rollup$members
+  rv$rollup_records <- scored$rollup$records
+  rv$rollup_suggestion <- scored$rollup_suggestion
   rv$blocked <- NULL
   if (is.null(rv$current_paper) || !rv$current_paper %in% rv$scope$papers) {
     rv$current_paper <- rv$scope$papers[[1L]]
@@ -186,6 +194,43 @@ launch_inputs <- function(args, config, restored = NULL) {
   )
 }
 
+#' The roll-up a launch starts with
+#'
+#' What run_eval_app() named, otherwise what a restored run used.
+#'
+#' @param args The arguments to run_eval_app().
+#' @param saved A restored run's `rollup`, or `NULL`.
+launch_rollup <- function(args, saved = NULL) {
+  if (length(args$rollup_by)) {
+    return(list(by = as.character(args$rollup_by),
+                sum = as.character(args$rollup_sum %||% character(0)), on = TRUE))
+  }
+  if (length(saved$by)) return(saved)
+  list(by = character(0), sum = character(0), on = TRUE)
+}
+
+#' The roll-up fields to score with: none when it is off or unset
+rollup_args <- function(rv) {
+  r <- rv$rollup
+  if (!isTRUE(r$on) || !length(r$by)) return(list(rollup_by = NULL, rollup_sum = NULL))
+  list(rollup_by = r$by, rollup_sum = r$sum)
+}
+
+#' Align and score with the current fields, links, and roll-up
+#'
+#' The one way every screen rescores from scratch, so the roll-up is applied
+#' the same whether the run was started from the field screen or the toggle on
+#' the comparison view.
+score_now <- function(rv, cfg) {
+  do.call(ecoeval::score_evaluation, c(
+    list(loaded_inputs(rv), current_keys(rv), cfg, rv$paper_map,
+         normalizers = rv$normalizers, skip = rv$skip, llm = llm_allowed(rv),
+         judge_cache = rv$judge_cache, norm_cache = rv$norm_cache,
+         rejected = rv$rejected, added = rv$added, overrides = rv$overrides),
+    rollup_args(rv)
+  ))
+}
+
 #' Run the setup stages at session start and seed the state from them
 #'
 #' Runs once, outside any reactive context, hence the isolate().
@@ -205,7 +250,7 @@ launch_state <- function(rv, restored = NULL) {
         normalizers = rv$normalizers, skip = rv$skip, llm = llm_allowed(rv),
         judge_cache = rv$judge_cache, norm_cache = rv$norm_cache,
         rejected = rv$rejected, added = rv$added, overrides = rv$overrides
-      ))),
+      ), rollup_args(rv))),
       error = function(e) list(stage = "load", message = conditionMessage(e))
     )
     seed_state(rv, run)
@@ -241,6 +286,23 @@ launch_evidence <- function(given, saved = NULL) {
 #' Which column holds each side's supporting sentences
 evidence_cols <- function(rv) {
   ecoeval::evidence_columns(rv$evidence_col, names(rv$ai_raw), names(rv$gold_raw))
+}
+
+#' The extraction records behind a row: its members when it is rolled up,
+#' otherwise just itself
+member_rids <- function(rv, rid) {
+  m <- rv$rollup_members
+  if (is.null(m) || is.na(rid)) return(rid)
+  hit <- match(rid, m$.rid)
+  if (is.na(hit)) rid else m$members[[hit]]
+}
+
+#' The records, as read, behind a rolled-up extraction row; NULL otherwise
+member_records <- function(rv, rid) {
+  m <- rv$rollup_members
+  if (is.null(m) || is.na(rid) || !rid %in% m$.rid) return(NULL)
+  rids <- m$members[[match(rid, m$.rid)]]
+  rv$rollup_records[match(rids, rv$rollup_records$.rid), , drop = FALSE]
 }
 
 #' Whether the LLM steps are allowed to run

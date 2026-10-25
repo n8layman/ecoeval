@@ -14,7 +14,8 @@ collect_findings(
   dropped_fields = character(0),
   linkage_fields = character(0),
   recurring_at = 3L,
-  labels = current_labels()
+  labels = current_labels(),
+  rollup_suggestion = NULL
 )
 }
 \arguments{
@@ -41,6 +42,9 @@ category rather than a typo.}
 
 \item{labels}{Side labels for the wording; see \code{\link[=side_labels]{side_labels()}}. The \code{group}
 codes stay \code{"schema"}, \code{"model"}, \code{"gold"}.}
+
+\item{rollup_suggestion}{The result of \code{\link[=suggest_rollup]{suggest_rollup()}}, when the
+extraction was not rolled up. A suggestion becomes a finding.}
 }
 \value{
 A tibble with \code{group} (\code{"schema"}, \code{"model"}, or \code{"gold"}),

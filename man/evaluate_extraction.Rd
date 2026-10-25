@@ -19,6 +19,8 @@ evaluate_extraction(
   comparator_config = NULL,
   fields = NULL,
   normalizers = NULL,
+  rollup_by = NULL,
+  rollup_sum = NULL,
   skip = character(0),
   ai_table = NULL,
   gold_table = NULL,
@@ -74,6 +76,15 @@ a gold standard's codes onto the wording the documents use. The grid and
 tooltips still show what each side actually said. Functions cannot be
 saved in a run configuration, so pass them again when restoring a run.}
 
+\item{rollup_by, rollup_sum}{Roll up the extraction before it is matched,
+for when it records papers in more detail than the reference -- say twelve
+rows by size class where the reference has one with the total.
+\code{rollup_by} names the fields to group the extraction's records by within
+each paper, and \code{rollup_sum} the numeric fields to add up, such as a
+quantity. The rules are ecoreview's; see \code{\link[=rollup_extraction]{rollup_extraction()}}. Only the
+extraction is rolled up. When these are \code{NULL} the app suggests a roll-up
+if one would pair more records (\code{\link[=suggest_rollup]{suggest_rollup()}}).}
+
 \item{skip}{Processing steps to leave out; see \code{\link[=skippable_steps]{skippable_steps()}}.
 \code{"normalize"} turns off the normalisers, built-in and supplied.}
 
@@ -85,8 +96,8 @@ largest table.}
 }
 \value{
 A list with \code{schema}, \code{ai}, \code{gold}, \code{scope}, \code{paper_map}, \code{config},
-\code{pairs}, \code{cells}, \code{conformance}, \code{findings} -- the same objects the app
-holds.
+\code{pairs}, \code{cells}, \code{conformance}, \code{findings}, \code{rollup}, and
+\code{rollup_suggestion} -- the same objects the app holds.
 }
 \description{
 The headless path the app is a shell over. Useful for a scripted run, a

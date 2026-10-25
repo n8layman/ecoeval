@@ -23,6 +23,8 @@
 #'   category rather than a typo.
 #' @param labels Side labels for the wording; see [side_labels()]. The `group`
 #'   codes stay `"schema"`, `"model"`, `"gold"`.
+#' @param rollup_suggestion The result of [suggest_rollup()], when the
+#'   extraction was not rolled up. A suggestion becomes a finding.
 #'
 #' @return A tibble with `group` (`"schema"`, `"model"`, or `"gold"`),
 #'   `finding`, `detail`, `n`, sorted by group then descending `n`.
@@ -36,7 +38,8 @@ collect_findings <- function(cells,
                              dropped_fields = character(0),
                              linkage_fields = character(0),
                              recurring_at = 3L,
-                             labels = current_labels()) {
+                             labels = current_labels(),
+                             rollup_suggestion = NULL) {
   labels <- as_side_labels(labels)
   out <- list()
   add <- function(group, finding, detail, n = NA_integer_) {
@@ -87,6 +90,18 @@ collect_findings <- function(cells,
                 labels$gold, fills$field[[i]], 100 * fills$gold_fill[[i]],
                 labels$ai, 100 * fills$ai_fill[[i]]),
         round(100 * gap))
+  }
+
+  # Several extraction records that look like parts of one reference record.
+  if (length(rollup_suggestion$by)) {
+    add("schema", sprintf("%s records in more detail than %s", labels$ai, labels$gold),
+        paste0(rollup_suggestion$summary, " Try rollup_by = c(",
+               paste0('"', rollup_suggestion$by, '"', collapse = ", "), ")",
+               if (length(rollup_suggestion$sum))
+                 paste0(" and rollup_sum = c(",
+                        paste0('"', rollup_suggestion$sum, '"', collapse = ", "), ")"),
+               "."),
+        rollup_suggestion$candidates$merged[[1L]])
   }
 
   # --- Model -------------------------------------------------------------

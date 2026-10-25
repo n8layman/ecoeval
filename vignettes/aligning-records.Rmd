@@ -227,3 +227,47 @@ granularity_check(gold, linkage, "gold")
 The two gold records in that paper differ only by year, and year isn't a
 linkage field. Add a linkage field and try again, or treat it as a finding: the
 two datasets split records differently.
+
+## When the extraction is more detailed than the gold standard
+
+Sometimes the extraction splits one gold record into several rows, for example
+twelve rows by size class where the gold standard has one row with the total
+count. Matched one to one, one of the twelve pairs with the gold record and the
+other eleven count as false positives.
+
+Rolling up the extraction fixes this. Its records are grouped within each paper
+by the fields you choose, numeric fields such as a quantity are added up, and
+the grouped rows are matched against the gold standard. The gold standard is
+never rolled up. The grouping rules are the same as ecoreview's.
+
+```{r}
+ai_rows <- tibble::tibble(
+  .rid = sprintf("a%05d", 1:4), .paper = "P1",
+  species = c("Pterois volitans", "Pterois volitans", "Pterois volitans",
+              "Amphiprion ocellaris"),
+  size_class = c("small", "medium", "large", NA),
+  quantity = c(10, 20, 30, 5)
+)
+gold_rows <- tibble::tibble(
+  .rid = c("g00001", "g00002"), .paper = "P1",
+  species = c("Pterois volitans", "Amphiprion ocellaris"),
+  quantity = c(60, 5)
+)
+rollup_extraction(ai_rows, by = "species", sum = "quantity")
+```
+
+`suggest_rollup()` tries grouping by each combination of the identity columns
+and picks the one that pairs the most gold records, preferring groupings whose
+totals match the gold standard's numbers:
+
+```{r}
+s <- suggest_rollup(ai_rows, gold_rows, "species", "quantity")
+s$by
+s$sum
+s$summary
+```
+
+In the app, the suggestion appears on the field-mapping screen and above the
+comparison grid, and a tick box switches the roll-up on and off. Pass
+`rollup_by` and `rollup_sum` to `run_eval_app()` or `evaluate_extraction()` to
+set it from the start.

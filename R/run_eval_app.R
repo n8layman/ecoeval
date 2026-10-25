@@ -52,6 +52,14 @@
 #'   a gold standard's codes onto the wording the documents use. The grid and
 #'   tooltips still show what each side actually said. Functions cannot be
 #'   saved in a run configuration, so pass them again when restoring a run.
+#' @param rollup_by,rollup_sum Roll up the extraction before it is matched,
+#'   for when it records papers in more detail than the reference -- say twelve
+#'   rows by size class where the reference has one with the total.
+#'   `rollup_by` names the fields to group the extraction's records by within
+#'   each paper, and `rollup_sum` the numeric fields to add up, such as a
+#'   quantity. The rules are ecoreview's; see [rollup_extraction()]. Only the
+#'   extraction is rolled up. When these are `NULL` the app suggests a roll-up
+#'   if one would pair more records ([suggest_rollup()]).
 #' @param skip Processing steps to leave out; see [skippable_steps()].
 #'   `"normalize"` turns off the normalisers, built-in and supplied.
 #' @param judge The LLM judge for "Resolve all differences": a function from
@@ -119,6 +127,8 @@ run_eval_app <- function(ai = NULL,
                          linkage_fields = NULL,
                          fields = NULL,
                          normalizers = NULL,
+                         rollup_by = NULL,
+                         rollup_sum = NULL,
                          skip = character(0),
                          judge,
                          skip_setup = FALSE,
@@ -158,6 +168,7 @@ run_eval_app <- function(ai = NULL,
     mapping = mapping, comparator_config = comparator_config,
     linkage_fields = linkage_fields, fields = fields,
     normalizers = normalizers, skip = skip,
+    rollup_by = rollup_by, rollup_sum = rollup_sum,
     judge_mode = judge_mode,
     judge = if (judge_mode == "supplied") judge,
     skip_setup = skip_setup,
@@ -217,8 +228,8 @@ app_directory <- function() {
 #'   also keeps the built-in LLM normaliser off.
 #'
 #' @return A list with `schema`, `ai`, `gold`, `scope`, `paper_map`, `config`,
-#'   `pairs`, `cells`, `conformance`, `findings` -- the same objects the app
-#'   holds.
+#'   `pairs`, `cells`, `conformance`, `findings`, `rollup`, and
+#'   `rollup_suggestion` -- the same objects the app holds.
 #' @export
 evaluate_extraction <- function(ai, gold, schema,
                                 ai_papers = NULL, gold_papers = NULL,
@@ -227,6 +238,7 @@ evaluate_extraction <- function(ai, gold, schema,
                                 paper_map = NULL, auto_accept = TRUE,
                                 mapping = NULL, comparator_config = NULL,
                                 fields = NULL, normalizers = NULL,
+                                rollup_by = NULL, rollup_sum = NULL,
                                 skip = character(0),
                                 ai_table = NULL, gold_table = NULL,
                                 labels = NULL) {
@@ -239,7 +251,8 @@ evaluate_extraction <- function(ai, gold, schema,
     mapping = mapping, comparator_config = comparator_config,
     linkage_fields = linkage_fields, fields = fields,
     normalizers = normalizers, skip = skip,
-    judge = judge, llm = !is.null(judge), skip_setup = TRUE
+    judge = judge, llm = !is.null(judge), skip_setup = TRUE,
+    rollup_by = rollup_by, rollup_sum = rollup_sum
   )
   if (!identical(run$stage, "scored")) {
     eco_abort(run$message %||% sprintf("The evaluation stopped at the %s stage.",
@@ -256,10 +269,12 @@ evaluate_extraction <- function(ai, gold, schema,
     collapses = scored$collapses,
     dropped_fields = config$field[xor(is.na(config$ai_col), is.na(config$gold_col))],
     linkage_fields = linkage,
-    labels = labels
+    labels = labels,
+    rollup_suggestion = if (is.null(scored$rollup)) scored$rollup_suggestion
   )
   list(schema = run$loaded$schema, ai = scored$ai, gold = scored$gold,
        scope = run$scoped$scope, paper_map = run$scoped$paper_map,
        config = config, pairs = scored$pairs, cells = scored$cells,
-       conformance = scored$conformance, findings = findings)
+       conformance = scored$conformance, findings = findings,
+       rollup = scored$rollup, rollup_suggestion = scored$rollup_suggestion)
 }

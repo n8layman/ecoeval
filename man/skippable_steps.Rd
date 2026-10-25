@@ -19,5 +19,7 @@ they are pre-steps and checks around it.
 \item \code{"conformance"} -- the schema conformance check on both sides.
 \item \code{"granularity"} -- the check for gold records that collapse together on
 the identity columns.
+\item \code{"suggest_rollup"} -- working out a suggested roll-up of the extraction
+(\code{\link[=suggest_rollup]{suggest_rollup()}}).
 }
 }
