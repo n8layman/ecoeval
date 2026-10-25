@@ -7,10 +7,10 @@
 
 #' The palette the grid and the charts share
 #'
-#' Fill carries agreement; schema violations are marked, not coloured. The four
-#' outcome hues are checked for colour-vision separation rather than chosen by
-#' eye: the hard pair is green against orange, which protanopia and
-#' deuteranopia both flatten, so the orange is deep enough to separate on
+#' The colour shows agreement; values the schema does not allow are marked
+#' with a dot. The four outcome colours are checked for colour-vision
+#' separation. Green and orange are the hardest pair, since protanopia and
+#' deuteranopia both flatten them, so the orange is dark enough to differ in
 #' lightness as well as hue.
 #'
 #' @return A named character vector of hex colours.
@@ -38,11 +38,9 @@ eco_theme <- function() {
 
 #' Column-wise accuracy, worst first
 #'
-#' The triage view -- but read it carefully. A column that is uniformly wrong
-#' has three possible causes and the chart cannot tell them apart: a
-#' misconfigured comparator, an ambiguous field description, or the model
-#' genuinely failing. Check them in that order; the chart says *where* to look,
-#' not why.
+#' If a column is wrong almost everywhere, check these in order: how the
+#' column is compared, then the field's description in the schema, then the
+#' model itself. The chart shows where to look, not which of these it is.
 #'
 #' @param fm A tibble from [field_metrics()].
 #' @return A ggplot.
@@ -98,8 +96,9 @@ plot_confusion <- function(cc, labels = current_labels()) {
 
 #' Similarity scores across a column's actual pairs
 #'
-#' The best of Splink's charts, and the reason it is worth borrowing: it lets a
-#' user place a fuzzy cutoff by looking at their own data rather than guessing.
+#' Shows how similar a column's values are across the matched pairs, so a
+#' fuzzy cutoff can be chosen from the data. Adapted from Splink's chart of
+#' the same name.
 #'
 #' @param profile A tibble from [similarity_profile()].
 #' @param threshold The current cutoff, drawn as a line.
@@ -242,26 +241,21 @@ parse_tile_key <- function(key) {
 
 #' The whole run as one picture: papers against columns
 #'
-#' The overview, and a **summary** rather than a verdict. Rows are papers,
-#' columns are the gold standard's columns, and every tile is one paper's
-#' records for one column, shaded by how much of it agrees: dark where the two
-#' sides match on everything, pale where they match on little, grey where there
+#' Rows are papers and columns are the gold standard's columns. Each tile
+#' covers one paper's records for one column and is shaded by how much of it
+#' agrees: dark when everything agrees, pale when little does, grey when there
 #' was nothing to score.
 #'
-#' It is a rate rather than one of the four outcome colours because a tile
-#' covers several records, and those colours describe a single cell -- a tile
-#' holding nine agreements and one disagreement would paint the same as one
-#' holding ten disagreements. The four colours live in
-#' [plot_record_heatmap()], where a tile really is one cell. The rate is the
-#' same accuracy [field_metrics()] reports, computed over that paper's cells for
-#' that column, so the map and the numbers under it cannot disagree.
+#' A tile covers several records, so it is shaded by a rate. The four outcome
+#' colours are used in [plot_record_heatmap()], where each tile is one cell. The
+#' rate is the accuracy [field_metrics()] reports, computed over that paper's
+#' cells for that column, so the map matches the numbers.
 #'
-#' Both axes are sorted by how much disagrees, worst first. That is the useful
-#' ordering rather than a cosmetic one: it pulls a column that fails everywhere
-#' to the left as a pale vertical band and a paper that fails everywhere to the
-#' top as a pale horizontal one, and those two patterns have different causes --
-#' a column that is bad across every paper is usually a comparator or a schema
-#' problem, a paper that is bad across every column is usually a bad alignment.
+#' Both axes are sorted by how much disagrees, worst first. A column that fails
+#' in every paper shows as a pale band on the left, and usually means its
+#' comparison or schema needs changing. A paper that fails in every column shows
+#' as a pale band at the top, and usually means its records were paired
+#' wrongly.
 #'
 #' Hovering a tile breaks down the rows behind it, where a row is one line of
 #' that paper's comparison -- a matched pair counts once, an unmatched record
@@ -372,17 +366,14 @@ plot_paper_heatmap <- function(grid, max_papers = 60, labels = current_labels())
 
 #' One paper, every record against every column
 #'
-#' The view the four outcome colours are for: rows are the records of a single
-#' paper -- matched pairs first, then the ones only the AI produced, then the
-#' ones only the gold standard has -- columns are the scored fields with the
-#' identity columns first, and **every tile is exactly one cell**. Nothing is
-#' aggregated, so green means these two values agree and orange means the AI
-#' asserted a value the gold standard does not have, with no averaging in
-#' between.
+#' Rows are the records of one paper: matched pairs first, then records only
+#' the AI produced, then records only the gold standard has. Columns are the
+#' scored fields, identity columns first. Each tile is one cell, coloured by
+#' its outcome: green when the two values agree, orange when only the AI has a
+#' value, and so on.
 #'
-#' Schema violations are marked, not coloured: a violating tile carries a dot,
-#' because validity is orthogonal to agreement and a cell can be both. Fill
-#' carries agreement; the marker carries validity.
+#' A value the schema does not allow is marked with a dot. The colour shows
+#' agreement and the dot shows validity, so a cell can have both.
 #'
 #' @param grid A tibble from [record_field_outcomes()].
 #' @param violations Keys of cells that fail schema validation, as

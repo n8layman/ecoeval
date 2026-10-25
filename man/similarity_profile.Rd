@@ -15,6 +15,5 @@ similarity_profile(pairs, ai, gold, field)
 A tibble with \code{pair_id}, \code{ai_value}, \code{gold_value}, \code{score}.
 }
 \description{
-Feeds the threshold-picking chart: the user places a fuzzy cutoff by looking
-at the distribution over their own data rather than guessing.
+Feeds the chart for choosing a fuzzy cutoff from the data.
 }

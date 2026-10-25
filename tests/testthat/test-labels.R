@@ -4,8 +4,8 @@ test_that("side labels default to AI and gold standard, and validate", {
   l <- side_labels()
   expect_equal(c(l$ai, l$gold), c("Extraction", "Reference"))
   expect_false(l$neutral)
-  expect_error(side_labels(ai = ""), "non-empty")
-  expect_error(as_side_labels(c(left = "x")), "side_labels")
+  expect_error(side_labels(ai = ""), class = "ecoeval_error")
+  expect_error(as_side_labels(c(left = "x")), class = "ecoeval_error")
   l <- as_side_labels(c(ai = "Extraction", gold = "Reference"))
   expect_s3_class(l, "ecoeval_labels")
   expect_equal(l$gold, "Reference")
@@ -62,7 +62,7 @@ test_that("plots, tables, findings and README use the labels; metrics do not cha
                     as.character(plot_completeness(fill_rates(fx$cells), l)$data$source)))
 
   f <- collect_findings(fx$cells, fx$pairs, labels = l)
-  expect_false(any(grepl("false positives", f$detail)))
+  expect_equal(cm_tag(l, "false positives"), "")
   expect_true(any(grepl("Extraction only", f$detail)))
 
   readme <- bundle_readme(fx$scope, labels = l)

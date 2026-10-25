@@ -16,7 +16,6 @@ A character vector of colour names.
 Fill carries agreement, through \code{\link[=cell_outcome]{cell_outcome()}}, so the comparison grid and
 the overview heatmap say the same thing with the same colours. Grey is the
 one cell that compared nothing: no record on one side, no value on the
-other. Schema
-violations are marked, not coloured -- validity is orthogonal to match
-state, and a cell can be both.
+other. Values the schema does not allow are marked with a dot instead of a
+colour, so a cell can show both.
 }

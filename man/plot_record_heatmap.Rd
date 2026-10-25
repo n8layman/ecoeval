@@ -28,16 +28,13 @@ plot_record_heatmap(
 A ggplot.
 }
 \description{
-The view the four outcome colours are for: rows are the records of a single
-paper -- matched pairs first, then the ones only the AI produced, then the
-ones only the gold standard has -- columns are the scored fields with the
-identity columns first, and \strong{every tile is exactly one cell}. Nothing is
-aggregated, so green means these two values agree and orange means the AI
-asserted a value the gold standard does not have, with no averaging in
-between.
+Rows are the records of one paper: matched pairs first, then records only
+the AI produced, then records only the gold standard has. Columns are the
+scored fields, identity columns first. Each tile is one cell, coloured by
+its outcome: green when the two values agree, orange when only the AI has a
+value, and so on.
 }
 \details{
-Schema violations are marked, not coloured: a violating tile carries a dot,
-because validity is orthogonal to agreement and a cell can be both. Fill
-carries agreement; the marker carries validity.
+A value the schema does not allow is marked with a dot. The colour shows
+agreement and the dot shows validity, so a cell can have both.
 }

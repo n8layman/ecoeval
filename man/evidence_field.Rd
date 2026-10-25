@@ -15,14 +15,13 @@ A field name, or \code{NA_character_}.
 \description{
 Extraction schemas in this family carry a field holding the sentences the
 value was read out of -- \code{all_supporting_source_sentences} in the bundled
-example. It is the field that settles an argument: when the AI and the gold
-standard disagree, the quoted text usually says which of them read the paper
-correctly, so it is worth pulling out and showing beside any value rather
-than leaving it as one more column in the grid.
+example. When the AI and the gold standard disagree, the quoted text usually
+shows which of them read the paper correctly, so the cell pop-up shows it
+beside each value.
 }
 \details{
-Found by name, most specific first. Returns \code{NA} when there is nothing that
-looks like one -- the evidence is a bonus, never a requirement.
+Found by name, most specific first. Returns \code{NA} when no column looks like
+one; the supporting sentences are optional.
 }
 \examples{
 evidence_field(c("species", "all_supporting_source_sentences"))

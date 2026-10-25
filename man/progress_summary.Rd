@@ -2,7 +2,7 @@
 % Please edit documentation in R/metrics.R
 \name{progress_summary}
 \alias{progress_summary}
-\title{Review progress, in the three states that matter}
+\title{Review progress}
 \usage{
 progress_summary(cells, papers, reviewed = character(0))
 }
@@ -18,7 +18,7 @@ A one-row tibble with \code{n_papers}, \code{n_judged}, \code{n_reviewed},
 \code{n_pending_cells}.
 }
 \description{
-Distinguishing them is honest about how the numbers were produced:
-\emph{unjudged} means only the cheap comparator rungs ran, \emph{judged} means the LLM
-settled the contested cells, \emph{reviewed} means a person looked at it.
+Says how the numbers were produced. \emph{Unjudged} means only the plain
+comparisons ran, \emph{judged} means the AI reviewer settled the cells they
+could not, and \emph{reviewed} means a person looked at the paper.
 }

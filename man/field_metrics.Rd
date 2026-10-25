@@ -12,7 +12,7 @@ field_metrics(cells)
 \value{
 A tibble with \code{field}, \code{tp}, \code{fp}, \code{fn}, \code{tn}, \code{n_scored},
 \code{accuracy}, \code{precision}, \code{recall}, \code{f1}, \code{n_pending}, \code{n_overridden},
-sorted worst accuracy first -- the triage order.
+sorted worst accuracy first.
 }
 \description{
 One row per column: the confusion counts and the metrics derived from them.

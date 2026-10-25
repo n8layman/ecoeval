@@ -13,6 +13,6 @@ compute_scope(ai_papers, gold_papers)
 A list with \code{papers} (the intersection), \code{ai_only}, \code{gold_only}.
 }
 \description{
-Papers are a filter, not a scored entity. Papers outside the intersection
-are excluded, never penalised.
+Only papers both sides cover are compared. Papers outside that set are
+left out and do not count against either side.
 }

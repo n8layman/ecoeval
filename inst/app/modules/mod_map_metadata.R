@@ -30,10 +30,9 @@ mod_map_metadata_ui <- function(id) {
   tagList(
     eco_panel(
       "Which column identifies the paper?",
-      paste("Detected automatically, in priority order: DOI -- the only",
-            "identifier in this domain that is actually unique -- then file",
-            "name, then title, then first author and year. An identifier can",
-            "span more than one column; author and year is why."),
+      paste("ecoeval picks the first of these that both sides have: DOI,",
+            "file name, title, or first author and year. First author and",
+            "year use two columns together."),
       uiOutput(ns("detected"))
     ),
     uiOutput(ns("override")),
@@ -115,8 +114,8 @@ mod_map_metadata_server <- function(id, rv) {
                 rows),
         if (!length(sh)) {
           div(class = "eco-note",
-              "No single identifier works across every table, so each is keyed",
-              "on its own best column. If the two sides do not line up, pick",
+              "No one column identifies papers in every table, so each table",
+              "uses its own best column. If the two sides do not line up, pick",
               "the columns by hand below.")
         }
       )
@@ -127,8 +126,8 @@ mod_map_metadata_server <- function(id, rv) {
         class = "eco-panel",
         tags$summary("Pick the columns by hand"),
         div(class = "eco-note",
-            "Only needed when the detected column is wrong. Several columns",
-            "make a compound key; they are joined in the order given."),
+            "Use this when the detected column is wrong. If you pick several",
+            "columns, they are combined in the order given."),
         fluidRow(lapply(tables(), function(t) {
           k <- isolate(current_key(t$key)) %||% auto_key(t$key)
           column(6, selectInput(

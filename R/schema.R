@@ -147,16 +147,15 @@ schema_type <- function(p) {
 
 #' Default comparator for each field
 #'
-#' Type is the only inference available without domain knowledge, and it is
-#' enough (see `DESIGN.md`, "Comparators"). Free text is distinguished from
-#' short strings by name, because JSON Schema has no way to say "this is prose".
+#' Chosen from each field's JSON Schema type (see `DESIGN.md`, "Comparators").
+#' Free text is told apart from short strings by the field's name, since JSON
+#' Schema has no type for prose.
 #'
-#' Free text defaults to `"judge"`, whose cascade still runs exact, normalized
-#' and fuzzy first -- so nothing costs money until the cheap rungs have failed,
-#' and a run with no API key simply reports those cells as unjudged rather than
-#' scoring reworded prose as wrong. Two records can point at the same fact with
-#' entirely different text, so string distance is hopeless there and a judge is
-#' the only sensible comparator.
+#' Free text defaults to `"judge"`. The exact, normalized and fuzzy steps still
+#' run first, so the AI reviewer only sees what they could not match. Without an
+#' API key those cells are marked as unjudged. Two records can describe the
+#' same fact in entirely different words, so string similarity does not work
+#' for prose.
 #'
 #' @param fields A field tibble (the `fields` element of an `ecoeval_schema`),
 #'   or the schema itself.
@@ -317,13 +316,12 @@ unschematised_fields <- function(fields, schema) {
 #'
 #' Extraction schemas in this family carry a field holding the sentences the
 #' value was read out of -- `all_supporting_source_sentences` in the bundled
-#' example. It is the field that settles an argument: when the AI and the gold
-#' standard disagree, the quoted text usually says which of them read the paper
-#' correctly, so it is worth pulling out and showing beside any value rather
-#' than leaving it as one more column in the grid.
+#' example. When the AI and the gold standard disagree, the quoted text usually
+#' shows which of them read the paper correctly, so the cell pop-up shows it
+#' beside each value.
 #'
-#' Found by name, most specific first. Returns `NA` when there is nothing that
-#' looks like one -- the evidence is a bonus, never a requirement.
+#' Found by name, most specific first. Returns `NA` when no column looks like
+#' one; the supporting sentences are optional.
 #'
 #' @param fields Character vector of field names in use.
 #' @return A field name, or `NA_character_`.

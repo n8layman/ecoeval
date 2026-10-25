@@ -10,9 +10,9 @@ ecoeval_palette()
 A named character vector of hex colours.
 }
 \description{
-Fill carries agreement; schema violations are marked, not coloured. The four
-outcome hues are checked for colour-vision separation rather than chosen by
-eye: the hard pair is green against orange, which protanopia and
-deuteranopia both flatten, so the orange is deep enough to separate on
+The colour shows agreement; values the schema does not allow are marked
+with a dot. The four outcome colours are checked for colour-vision
+separation. Green and orange are the hardest pair, since protanopia and
+deuteranopia both flatten them, so the orange is dark enough to differ in
 lightness as well as hue.
 }
