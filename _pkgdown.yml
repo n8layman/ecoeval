@@ -133,6 +133,7 @@ reference:
       - check_conformance
       - unschematised_fields
       - evidence_field
+      - evidence_columns
 
   - title: The comparator cascade
     desc: >

@@ -343,3 +343,60 @@ evidence_field <- function(fields) {
   }
   NA_character_
 }
+
+#' The column holding each side's supporting sentences
+#'
+#' The cell pop-up shows the sentences each side quoted for a value. Which
+#' column holds them can be named, for both sides or one side at a time; a side
+#' not named is found by [evidence_field()], so naming nothing changes nothing.
+#'
+#' @param evidence_col `NULL` to find both by name; one column name for both
+#'   sides; or one per side, `c(ai = "supporting_text", gold = NA)`, where `NA`
+#'   means that side has none and a side left out is found by name.
+#' @param ai,gold Each side's column names, or its record table.
+#' @return A named character vector, `c(ai = , gold = )`, `NA` where a side has
+#'   none. A named column is returned whether or not the table has it, so a
+#'   typo can be reported rather than silently showing nothing.
+#' @examples
+#' evidence_columns(NULL, c("species", "all_supporting_source_sentences"), "species")
+#' evidence_columns(c(ai = "context", gold = NA), "context", "notes")
+#' @export
+evidence_columns <- function(evidence_col = NULL, ai = character(0),
+                             gold = character(0)) {
+  spec <- as_evidence_spec(evidence_col)
+  cols <- function(x) if (is.data.frame(x)) names(x) else as.character(x)
+  found <- list(ai = cols(ai), gold = cols(gold))
+  vapply(c(ai = "ai", gold = "gold"), function(side) {
+    spec[[side]] %||% evidence_field(found[[side]])
+  }, character(1))
+}
+
+#' Check an `evidence_col` argument and put it in one shape
+#'
+#' @param evidence_col As for [evidence_columns()].
+#' @return A list with an `ai` and a `gold` element each holding a column
+#'   name, `NA` for none, or `NULL` (or absent) to find it by name.
+#' @keywords internal
+#' @noRd
+as_evidence_spec <- function(evidence_col) {
+  if (!length(evidence_col)) return(list())
+  bad <- function() {
+    eco_abort(paste0("`evidence_col` is a column name, or one per side: ",
+                     "c(ai = \"supporting_text\", gold = NA)."))
+  }
+  one <- function(x) {
+    if (is.null(x)) return(NULL)
+    if (length(x) != 1L || !(is.character(x) || is.na(x))) bad()
+    x <- as.character(x)
+    if (!is.na(x) && !nzchar(x)) bad()
+    x
+  }
+  nms <- names(evidence_col)
+  if (is.null(nms)) {
+    if (length(evidence_col) != 1L) bad()
+    x <- one(evidence_col[[1L]])
+    return(list(ai = x, gold = x))
+  }
+  if (!all(nms %in% c("ai", "gold")) || anyDuplicated(nms)) bad()
+  lapply(as.list(evidence_col), one)
+}

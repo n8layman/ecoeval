@@ -24,6 +24,7 @@ run_eval_app(
   judge,
   skip_setup = FALSE,
   labels = NULL,
+  evidence_col = NULL,
   run_config = NULL,
   launch.browser = TRUE,
   ...
@@ -94,6 +95,12 @@ supplied rather than opening its screen.}
 the scope panel, matrix axes, findings, and exports. \code{side_labels(..., neutral = TRUE)} also drops the TP/FP/FN wording, for a reference that is
 a second source rather than ground truth; the metrics are unchanged.
 Saved with the run.}
+
+\item{evidence_col}{The column holding the supporting sentences the cell
+pop-up shows: one name for both sides, or one per side, \code{c(ai = "supporting_text", gold = NA)}, where \code{NA} means that side has none. A side
+not named is found by name, as \code{\link[=evidence_field]{evidence_field()}} does. A named column the
+records do not have is reported in the pop-up. Saved with the run; see
+\code{\link[=evidence_columns]{evidence_columns()}}.}
 
 \item{run_config}{Optional path to a \code{run_config.json} from an earlier
 session. Reload it and you are exactly where you were -- inputs, mappings,

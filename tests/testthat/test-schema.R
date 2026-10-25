@@ -78,3 +78,31 @@ test_that("the evidence column is found by name, most specific first", {
   # Nothing that looks like one is not an error -- the quotes are a bonus.
   expect_true(is.na(evidence_field(c("species", "count"))))
 })
+
+test_that("the evidence column can be named, for both sides or one", {
+  ai <- c("species", "all_supporting_source_sentences", "context")
+  gold <- c("species", "evidence_type")
+  # Nothing named: found by name, as before.
+  expect_equal(evidence_columns(NULL, ai, gold),
+               c(ai = "all_supporting_source_sentences", gold = "evidence_type"))
+  # One name for both sides, whether or not each side has it.
+  expect_equal(evidence_columns("context", ai, gold),
+               c(ai = "context", gold = "context"))
+  # Per side: NA turns a side off, and a side left out is found by name.
+  expect_equal(evidence_columns(c(ai = "context", gold = NA), ai, gold),
+               c(ai = "context", gold = NA))
+  expect_equal(evidence_columns(c(gold = NA), ai, gold),
+               c(ai = "all_supporting_source_sentences", gold = NA))
+  expect_equal(evidence_columns(list(ai = NULL, gold = "species"), ai, gold),
+               c(ai = "all_supporting_source_sentences", gold = "species"))
+  # A record table works as well as its names.
+  expect_equal(evidence_columns(NULL, tibble::tibble(quote = "x"))[["ai"]], "quote")
+})
+
+test_that("a malformed evidence_col is refused", {
+  expect_error(evidence_columns(c("a", "b")), "one per side")
+  expect_error(evidence_columns(c(ai = "a", reference = "b")), "one per side")
+  expect_error(evidence_columns(c(ai = "a", "b")), "one per side")
+  expect_error(evidence_columns(""), "one per side")
+  expect_error(evidence_columns(3), "one per side")
+})
