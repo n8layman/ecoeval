@@ -283,16 +283,44 @@ mod_compare_server <- function(id, rv) {
     # filters stay set as the reader walks from paper to paper, since what
     # they are looking for rarely changes with the paper. Rendered once, at
     # session start, so the side labels a restored run brings are in force.
+    #
+    # Every tick box means the same thing -- show these rows -- and starts
+    # ticked. Narrowing to the suspect links is a different kind of thing, a
+    # focus rather than a kind of row, so it is a button that says how many
+    # there are.
     output$row_filters <- renderUI({
       div(
         class = "eco-row-filters",
+        span(class = "eco-filter-label", "Row filters:"),
         checkboxInput(ns("f_matched"), "Matched pairs", TRUE),
         checkboxInput(ns("f_ai_only"), ecoeval::record_kind_label("AI only"), TRUE),
         checkboxInput(ns("f_gold_only"), ecoeval::record_kind_label("gold only"), TRUE),
+        checkboxInput(ns("f_agreeing"), "Rows that fully agree", TRUE),
         span(class = "eco-filter-gap"),
-        checkboxInput(ns("f_hide_agree"), "Hide rows where everything agrees", FALSE),
-        checkboxInput(ns("f_suspect"), "Only links that look wrong", FALSE),
+        uiOutput(ns("suspect_button"), inline = TRUE),
         textInput(ns("f_text"), NULL, placeholder = "Rows containing...")
+      )
+    })
+
+    # The suspect links in this paper, and whether the grid is narrowed to
+    # them. The focus stays on from paper to paper, like the tick boxes.
+    suspects <- reactive({
+      req(rv$cells, rv$current_paper)
+      ecoeval::suspect_pairs(rv$cells[rv$cells$paper == rv$current_paper, ],
+                             identity_fields(rv))$pair_id
+    })
+    suspect_only <- reactiveVal(FALSE)
+    observeEvent(input$f_suspect, suspect_only(!suspect_only()))
+
+    output$suspect_button <- renderUI({
+      n <- length(suspects())
+      on <- suspect_only()
+      actionButton(
+        ns("f_suspect"), sprintf("Links that look wrong (%d)", n),
+        class = paste("btn-sm eco-suspect-btn", if (on) "active btn-primary"),
+        `aria-pressed` = if (on) "true" else "false",
+        title = if (on) "Showing only these links. Press again to show every row."
+                else "Show only the links that agree on nothing, or on no identity column."
       )
     })
 
@@ -308,8 +336,8 @@ mod_compare_server <- function(id, rv) {
       for (id in c("f_matched", "f_ai_only", "f_gold_only")) {
         updateCheckboxInput(session, id, value = TRUE)
       }
-      updateCheckboxInput(session, "f_hide_agree", value = FALSE)
-      updateCheckboxInput(session, "f_suspect", value = FALSE)
+      updateCheckboxInput(session, "f_agreeing", value = TRUE)
+      suspect_only(FALSE)
       updateTextInput(session, "f_text", value = "")
     })
 
@@ -323,7 +351,7 @@ mod_compare_server <- function(id, rv) {
     })
 
     # Which tiles fail schema validation. Worked out over the whole paper, so a
-    # row with a violation survives "hide rows where everything agrees".
+    # row with a violation stays when "Rows that fully agree" is unticked.
     heat_bad <- reactive({
       d <- heat_all()
       if (!nrow(d)) return(logical(0))
@@ -341,13 +369,10 @@ mod_compare_server <- function(id, rv) {
       kinds <- c("matched", "AI only", "gold only")[c(
         ticked("f_matched", TRUE), ticked("f_ai_only", TRUE), ticked("f_gold_only", TRUE)
       )]
-      suspect <- if (ticked("f_suspect", FALSE)) {
-        ecoeval::suspect_pairs(rv$cells[rv$cells$paper == rv$current_paper, ],
-                               identity_fields(rv))$pair_id
-      }
       ecoeval::filter_record_rows(
-        d, kinds = kinds, hide_agreeing = ticked("f_hide_agree", FALSE),
-        violations = unique(d$pair_id[heat_bad()]), pairs = suspect,
+        d, kinds = kinds, hide_agreeing = !ticked("f_agreeing", TRUE),
+        violations = unique(d$pair_id[heat_bad()]),
+        pairs = if (suspect_only()) suspects(),
         text = filter_text()
       )
     })
@@ -387,7 +412,14 @@ mod_compare_server <- function(id, rv) {
       }
       h <- sprintf("%dpx", 26 * heat_rows() + 300)
       if (nrow(d) <= RECORD_HEATMAP_MAX_TILES) {
-        plotly::plotlyOutput(ns("heatmap"), height = h)
+        # The row filters above take whole records out; the legend is the
+        # cell-wise counterpart, and plotly gives it for free.
+        tagList(
+          plotly::plotlyOutput(ns("heatmap"), height = h),
+          div(class = "eco-note", style = "margin-top:6px;",
+              "To hide cells rather than rows, click an outcome in the legend;",
+              "double-click one to show only it.")
+        )
       } else {
         tagList(
           plotOutput(ns("heatmap_static"), height = h,

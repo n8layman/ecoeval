@@ -813,3 +813,41 @@ test_that("row filters narrow the grid, say how many rows are hidden, and leave 
     expect_identical(rv$cells, cells_before)
   })
 })
+
+test_that("every row filter tick box means show, and the suspect button narrows", {
+  skip_without_app()
+  rv <- scored_state()
+  # The fixture has no suspect links, so make one: a matched pair that agrees
+  # on nothing.
+  shiny::isolate({
+    pid <- rv$pairs$pair_id[rv$pairs$kind == "pair"][[1L]]
+    hit <- rv$cells$pair_id == pid & rv$cells$state == "agree"
+    rv$cells$state[hit] <- "disagree"
+    rv$current_paper <- rv$pairs$paper[rv$pairs$pair_id == pid][[1L]]
+  })
+  expect_true(pid %in% shiny::isolate(suspect_pairs(rv$cells, identity_fields(rv))$pair_id))
+  shiny::testServer(mod_compare_server, args = list(id = "compare", rv = rv), {
+    total <- length(unique(heat_all()$pair_id))
+    # Unticking "Rows that fully agree" can only take rows away.
+    session$setInputs(f_agreeing = FALSE)
+    expect_true(all(unique(heat()$pair_id) %in% unique(heat_all()$pair_id)))
+    session$setInputs(f_agreeing = TRUE)
+    expect_equal(length(unique(heat()$pair_id)), total)
+
+    # The button says how many, narrows to them, and a second press undoes it.
+    expect_match(as.character(output$suspect_button$html),
+                 sprintf("Links that look wrong \\(%d\\)", length(suspects())))
+    session$setInputs(f_suspect = 1)
+    expect_true(suspect_only())
+    expect_setequal(unique(heat()$pair_id), suspects())
+    expect_match(as.character(output$suspect_button$html), "aria-pressed=\"true\"")
+    session$setInputs(f_suspect = 2)
+    expect_false(suspect_only())
+    expect_equal(length(unique(heat()$pair_id)), total)
+
+    # Show all clears the focus too.
+    session$setInputs(f_suspect = 3)
+    session$setInputs(show_all = 1)
+    expect_false(suspect_only())
+  })
+})

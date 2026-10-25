@@ -151,3 +151,5 @@ table.dataTable thead th { font-size: 11.5px; font-weight: 620; }
 .eco-row-filters .checkbox { margin: 0; }
 .eco-row-filters input.form-control { height: 30px; width: 220px; font-size: 13px; }
 .eco-row-filters .eco-filter-gap { width: 1px; height: 20px; background: var(--eco-line); }
+.eco-row-filters .eco-filter-label { font-weight: 600; color: var(--eco-ink); }
+.eco-row-filters .eco-suspect-btn { padding: 3px 10px; }
