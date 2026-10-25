@@ -28,8 +28,8 @@ normaliser is \code{"none"} or no LLM is available.
 Normalisation is a \strong{pre-matching} step, run per value and cached, because
 the matcher cannot see through semantic equivalence with low string similarity:
 \code{"Myotis lucifugus"} against \code{"little brown bat"}, or a binomial against its
-abbreviation. Left un-normalised, the matcher systematically fails to pair
-records that obviously correspond, on exactly the fields it depends on most.
+abbreviation. Without normalisation, the matcher fails to pair records that
+clearly correspond, on the fields it relies on most.
 }
 \details{
 Plain fuzzy needs no pre-step -- the matcher already compares by string

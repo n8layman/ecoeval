@@ -16,13 +16,11 @@ A tibble with \code{pair_id}, \code{paper}, \code{n_fields}, \code{reason}, sort
 paper.
 }
 \description{
-Two cheap signals, both strong. A pair that agrees on \strong{nothing} is almost
-certainly two unrelated records the matcher joined. A pair that disagrees on
-every \strong{identity column} is the subtler case: it may agree on incidentals
-like country and year while the fields that establish which record this
-actually is all disagree.
+Flags a matched pair in two cases. A pair that agrees on \strong{nothing} is
+almost certainly two unrelated records joined by the matcher. A pair that
+disagrees on every \strong{identity column} may still agree on other columns like
+country and year, but the columns that say which record it is all disagree.
 }
 \details{
-This is what turns "review all 47 papers or none" into "look at these
-three", and it is the bridge between the fast path and the review path.
+Use it to pick which papers to review by hand.
 }

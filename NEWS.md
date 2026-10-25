@@ -1,3 +1,32 @@
+# ecoeval 0.5.1
+
+* Plainer wording across the app, the findings, the export README, the help
+  pages, the README, and the vignettes. Notes on screen now say what a panel
+  shows and what to do, and the design reasoning has moved out of the
+  interface.
+* The note about schema-violation dots appears only on a paper that has one.
+* The Linking panel is hidden when a paper has nothing to link.
+* Tests no longer check the wording of messages. Tests that only checked prose
+  were removed, and the rest check values, flags, and counts.
+
+# ecoeval 0.5.0
+
+* The comparison view has row filters (#30), so a long paper can be narrowed
+  to the rows that need attention. Tick boxes all mean "show these" and start
+  ticked: matched pairs, Extraction only, Reference only, and rows that fully
+  agree (a row with a schema violation always shows). A "Links that look wrong
+  (n)" button narrows the grid to the pairs `suspect_pairs()` flags, and a
+  search box finds rows containing a value on either side. The search applies
+  when you press Enter or Filter, so the grid stays put while you type. A note under the
+  grid points to the legend for hiding cells rather than rows: click an
+  outcome to hide it, double-click to show only it.
+* Filters are view-only: hidden rows are still scored, and the metrics,
+  confusion matrix, and export are unchanged. "Showing 12 of 64 rows" says how
+  many are hidden, with a one-click "Show all". The filters stay set as you
+  move between papers, and are not saved with the run.
+* `filter_record_rows()` does the filtering over a
+  `record_field_outcomes()` table.
+
 # ecoeval 0.4.0
 
 * `run_eval_app(evidence_col = )` names the column holding the supporting

@@ -74,9 +74,9 @@
 #'   records do not have is reported in the pop-up. Saved with the run; see
 #'   [evidence_columns()].
 #' @param run_config Optional path to a `run_config.json` from an earlier
-#'   session. Reload it and you are exactly where you were -- inputs, mappings,
-#'   manual link decisions, and cached LLM verdicts included. Arguments passed
-#'   here take precedence over what it holds.
+#'   session. The app restores its inputs, mappings, manual links and
+#'   overrides, and AI reviewer verdicts. Arguments passed here take
+#'   precedence over what it holds.
 #' @param launch.browser Passed to [shiny::runApp()].
 #' @param ... Reserved.
 #'

@@ -37,19 +37,18 @@ person produced by hand. You want to know how well the AI did.
 
 You can't just lay the two tables side by side. People — and AI — often describe
 the same thing in different ways: a different spelling, a name written out in
-full on one side and shortened on the other, a whole sentence worded differently
-but meaning exactly the same. **The rows don't line up on their own, even when
-they're describing the same thing.**
+full on one side and shortened on the other, or a sentence worded differently
+with the same meaning. So the rows don't line up on their own.
 
 So ecoeval works in two steps. First it **pairs up the rows**, matching each AI
-row to the human row describing the same thing — using probabilistic record
-linkage, fuzzy matching for near-identical text, and an LLM judge where the
+row to the human row describing the same thing. It uses probabilistic record
+linkage, fuzzy matching for near-identical text, and an AI reviewer where the
 wording differs but the meaning may not. Then it **scores the result**:
 precision, recall, and field-level accuracy across the whole set.
 
-You don't have to check its work row by row. Press **Resolve all differences**,
-read the numbers, done. Going through papers one at a time is for when you want
-to see *why* it's getting things wrong.
+You don't have to check every row. Press **Resolve all differences** and read
+the numbers. Go through the papers one at a time when you want to see why the
+extraction gets things wrong.
 
 ## Installation
 
@@ -82,19 +81,19 @@ run_eval_app(
 
 ## Status
 
-Working. The evaluation runs end to end — load, align papers, align records,
-score, read the numbers, export the bundle. The LLM rungs (the normalising
-comparator and the judge) need an API key; without one the cheap comparator
-rungs still run and contested cells are reported as *unjudged* rather than
-silently scored wrong.
+Working. The evaluation runs end to end: load, align papers, align records,
+score, read the numbers, export the bundle. The AI steps (normalising names and
+the AI reviewer) need an API key. Without one, the plain comparisons still run,
+and cells they can't settle are marked as waiting for the AI reviewer and
+counted as differences.
 
-See [`DESIGN.md`](DESIGN.md) for the full design — including a **Deliberately
-out of scope** section recording what was considered and cut, and why.
+See [`DESIGN.md`](DESIGN.md) for the full design, including a **Deliberately
+out of scope** section listing what was considered and left out, and why.
 
 ### Scripting it
 
-The app is a shell over a library. Everything it computes is a plain function
-over data frames, so an evaluation can be run without launching anything:
+Everything the app computes is also available as plain functions over data
+frames, so you can run an evaluation from a script:
 
 ```r
 run <- ecoeval::evaluate_extraction(
@@ -104,7 +103,7 @@ run <- ecoeval::evaluate_extraction(
 )
 
 ecoeval::aggregate_metrics(run$cells)
-ecoeval::field_metrics(run$cells)   # sorted worst first -- the triage order
+ecoeval::field_metrics(run$cells)   # sorted worst first
 run$findings                        # grouped schema / model / gold
 ```
 
@@ -117,7 +116,7 @@ the load screen, or point the arguments at the synthetic fixtures in
 - R >= 4.0
 - [ecoextract](https://github.com/n8layman/ecoextract) output, or any record
   table plus the `schema.json` it was extracted against
-- An API key for the LLM judge (copy `.env.example` to `.env`)
+- An API key for the AI reviewer (copy `.env.example` to `.env`)
 
 ## License
 

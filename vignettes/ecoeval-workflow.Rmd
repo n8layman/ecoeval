@@ -14,39 +14,40 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 You have two sets of results from the same papers: one the AI produced, one a
 person produced by hand. You want to know how well the AI did.
 
-You can't just lay the two tables side by side, because people — and AI — often
+The two tables can't simply be laid side by side, because people and AI often
 describe the same thing in different ways. So ecoeval works in two steps. First
 it **pairs up the rows**, matching each AI row to the human row describing the
 same thing. Then it **scores the result**.
 
-This guide walks the whole thing. [Aligning
-records](aligning-records.html) covers why the pairing is the hard part;
-[Metrics](metrics.html) covers how the numbers are computed.
+This guide covers the whole process. [Aligning records](aligning-records.html)
+explains how the pairing works, and [Metrics](metrics.html) explains how the
+numbers are computed.
 
 ## The five inputs
 
-Four data inputs, symmetric across the two sources, plus the schema:
+Four data inputs, two for each side, plus the schema:
 
 |          | Paper list       | Record list        |
 | -------- | ---------------- | ------------------ |
 | **AI**   | papers processed | records extracted  |
 | **Gold** | papers reviewed  | records recorded   |
 
-`schema.json` — the schema the AI extracted against — is a **required fifth
-input**. It drives comparator defaults, the enum conformance check, and the
-default linkage-field suggestion.
+`schema.json`, the schema the AI extracted against, is **required**. It sets
+how each column is compared by default, which values each column allows, and
+which columns identify a record.
 
-The paper lists are optional. They **widen scope**; they don't change how
-anything is scored. Each one lets you see a case that was otherwise invisible:
+The paper lists are optional. They add papers to the comparison without
+changing how anything is scored. Each list brings in papers that would
+otherwise be left out:
 
-| List supplied | Papers it brings into scope        | What that lets you catch |
+| List supplied | Papers it adds                     | What that lets you catch |
 | ------------- | ---------------------------------- | ------------------------ |
 | Gold          | Human reviewed, found nothing      | AI **over**-extraction   |
 | AI            | AI processed, found nothing        | AI **under**-extraction  |
 
-For an ecoextract database the AI paper list is free — it's the `documents`
-table, which knows every paper processed regardless of whether extraction
-produced records.
+For an ecoextract database you don't need to supply the AI paper list. ecoeval
+reads it from the `documents` table, which lists every paper processed, whether
+or not extraction produced records.
 
 ## Running it
 
@@ -65,23 +66,24 @@ run_eval_app(
 )
 ```
 
-The app is a wizard with a persistent progress rail. Stages are revisitable
-without redoing everything downstream:
+The app walks through six stages, listed down the left side. You can go back to
+any stage without redoing the ones after it:
 
-1. **Load** — the five inputs
-2. **Identify the papers** — which column identifies a paper; detected in a
-   fixed priority order (DOI, file name, title, first author + year)
-3. **Align papers** — sets scope
-4. **Map record fields** — column mapping, comparators, identity columns
-5. **Compare** — one paper at a time; alignment review *and* results on one screen
-6. **Dashboard** — aggregate metrics, updating as review progresses
+1. **Load**: the five inputs
+2. **Identify the papers**: which column identifies a paper, detected in this
+   order: DOI, file name, title, first author and year
+3. **Align papers**: which papers are compared
+4. **Map record fields**: column mapping, comparisons, identity columns
+5. **Compare**: one paper at a time, with the pairings and the results on one
+   screen
+6. **Dashboard**: overall metrics, updated as you review
 
 ### Skipping the setup screens
 
 Every input a setup screen asks for can be passed to `run_eval_app()` instead.
-The app runs the stages it was given inputs for and opens on the first one it
-was not, so a run repeated after every prompt change can open straight on the
-comparison:
+The app runs the stages it has inputs for and opens on the first one it
+doesn't. If you rerun the same evaluation after every prompt change, it can
+open straight on the comparison:
 
 ```r
 run_eval_app(
@@ -97,30 +99,31 @@ run_eval_app(
 )
 ```
 
-Leave an input out and the app stops on its screen, pre-filled with everything
-before it. `skip_setup = TRUE` takes the screen's default instead -- the
-detected paper key, the matcher's high-confidence paper links, the suggested
-mapping, the schema's comparators -- and opens on the comparison either way.
-`paper_map` supplies the paper links outright; `auto_accept = FALSE` stops on
-the paper-link review rather than accepting the confident ones.
+If you leave an input out, the app stops on its screen, filled in with
+everything before it. With `skip_setup = TRUE` it takes the screen's defaults
+instead (the detected paper key, the matcher's high-confidence paper links, the
+suggested mapping, the schema's comparisons) and opens on the comparison.
+`paper_map` supplies the paper links directly. With `auto_accept = FALSE` the
+app stops on the paper-link review instead of accepting the confident links.
 
-A normaliser maps both sides onto a common form before matching and comparison
--- a gold standard's codes onto the wording the documents use, say. The grid and
-its tooltips still show what each side actually said, with the compared form
-beside it when the two differ. `skip` switches off steps a run does not need:
-`"normalize"`, `"conformance"` (the schema check), `"granularity"`.
+A normaliser converts both sides to a common form before matching and
+comparison, for example turning a gold standard's codes into the wording the
+documents use. The grid and its tooltips still show what each side actually
+said, with the compared form beside it when the two differ. `skip` turns off
+steps a run doesn't need: `"normalize"`, `"conformance"` (the schema check),
+and `"granularity"`.
 
 `evaluate_extraction()` takes the same arguments, so a scripted run and the app
 can share one configuration.
 
-To try it without any data of your own, press **Use the bundled example** on the
-load screen. It reads the synthetic fixtures shipped with the package, each row
-of which exists to exercise a specific case the evaluation has to get right.
+To try it without any data of your own, press **Use the bundled example** on
+the load screen. It reads the synthetic example data shipped with the package,
+where each row tests a specific case.
 
 ## Without the app
 
-The app is a shell over a library. Everything it computes is a plain function
-over data frames, so an evaluation can be scripted:
+Everything the app computes is also available as plain functions over data
+frames, so you can run an evaluation from a script:
 
 ```{r}
 library(ecoeval)
@@ -136,7 +139,8 @@ run <- evaluate_extraction(
 )
 ```
 
-Scope first — papers are a filter, not a scored entity:
+First, which papers were compared. Papers only one side covers are left out
+and don't count against either side:
 
 ```{r}
 str(run$scope)
@@ -149,52 +153,51 @@ aggregate_metrics(run$cells)
 record_metrics(run$pairs)
 ```
 
-And the per-column picture, sorted worst first, which is the triage order:
+And the numbers for each column, worst first:
 
 ```{r}
 field_metrics(run$cells)[, c("field", "n_scored", "accuracy", "precision", "recall")]
 ```
 
-## Two ways to use this, and neither is the shortcut
+## Two ways to use it
 
-**"How accurate is it?"** — press **Resolve all differences** on the dashboard.
-The judge runs across every scoped paper, the numbers fill in, and you never
-open a single paper. This is the common case.
+**"How accurate is it?"** Press **Resolve all differences** on the dashboard.
+The AI reviewer runs across every paper, the numbers fill in, and you don't
+need to open a paper. This is the usual case.
 
-**"Why is it wrong?"** — walk the papers, read the mismatches, spot the patterns
-worth fixing before the next extraction run. This is what you do when you're
-iterating on the schema or the prompt rather than reporting a number.
+**"Why is it wrong?"** Go through the papers, read the mismatches, and look for
+patterns to fix before the next extraction run. Do this when you're changing
+the schema or the prompt.
 
-Skipping review means accepting the matcher's pairings. Field-level metrics are
-largely robust to that; record-level precision and recall are not. Worth
-knowing, not worth worrying about.
+If you skip the review, you're accepting the matcher's pairings. A wrong
+pairing barely moves the field-level metrics, but it does move record-level
+precision and recall.
 
-The dashboard is honest about which path produced the numbers:
+The dashboard shows how the numbers were produced:
 
 ```{r}
 progress_summary(run$cells, run$scope$papers)
 ```
 
-`n_pending_cells` counts cells the cheap comparator rungs couldn't settle and
-the judge hasn't seen. They currently count as disagreements.
+`n_pending_cells` counts cells the plain comparisons couldn't settle and the AI
+reviewer hasn't read yet. For now they count as differences.
 
 ## Findings
 
-Findings are **output, not gates**, grouped by who acts on them — the schema,
-the model, or the gold standard. Nothing here adjusts a metric.
+Findings are grouped by where the fix belongs: the schema, the model, or the
+gold standard. None of them change the metrics.
 
 ```{r}
 run$findings[, c("group", "finding")]
 ```
 
-Only two conditions actually stop the app, because neither leaves anything to
-compare: zero paper overlap between the two sources, and no mappable fields
-between the two record sets.
+The app only stops in two cases, because in either one there's nothing to
+compare: the two sources share no papers, or no fields can be mapped between
+the two record sets.
 
 ## Export
 
-The session artifact and the export bundle are the same object, so save,
-restore, and download share one implementation.
+The export bundle and a saved session are the same files.
 
 ```{r, eval = FALSE}
 export_bundle(
@@ -217,18 +220,18 @@ ecoeval_run_2026-08-31/
   plots/                   column accuracy, per-field confusion matrices (PNG)
   run_config.json          mappings, comparators, linkage fields, judge verdict
                            cache, every manual link/reject decision, scope
-  README.txt               what's here, scope statement, any active warnings
+  README.txt               what's here, which papers were compared, any warnings
 ```
 
-`run_config.json` is what makes a run reproducible. Reload it with
-`run_eval_app(run_config = "...")` and you are exactly where you were — manual
-link decisions and cached LLM verdicts included.
+`run_config.json` lets you reproduce a run. Pass it to
+`run_eval_app(run_config = "...")` to pick up where you left off, with your
+manual links and the AI reviewer's verdicts.
 
 ## Iterating
 
-Two things make this an improvement tool rather than a report generator.
+Two features help you improve the extraction from one run to the next.
 
-**Runs are versioned and diffable.**
+**Compare a run with an earlier one.**
 
 ```{r}
 before <- capture_run_config(new_run_config(),
@@ -238,22 +241,22 @@ after  <- capture_run_config(new_run_config(),
 diff_runs(before, after)
 ```
 
-**Schema findings emit an applicable patch, not prose.**
+**Get proposed schema changes as a patch.**
 
 ```{r}
 patch <- schema_patch(run$conformance, NULL, run$cells, run$schema)
 patch$enum_additions
 ```
 
-A value recurring many times is a category the schema is missing. A single one
-is a typo. The counts make the difference obvious, and the two have opposite
-fixes — so the patch proposes only the first.
+A value that appears many times probably needs adding to the schema. A value
+that appears once is probably a typo. The patch only proposes adding the
+values that appear many times.
 
 ## Requirements
 
 - R >= 4.0
 - [ecoextract](https://github.com/n8layman/ecoextract) output, or any record
   table plus the `schema.json` it was extracted against
-- An API key for the LLM judge — copy `.env.example` to `.env`. Without one the
-  cheap comparator rungs still run; contested cells are reported as unjudged
-  rather than silently scored wrong.
+- An API key for the AI reviewer: copy `.env.example` to `.env`. Without one,
+  the plain comparisons still run, and cells they can't settle are counted as
+  differences until the AI reviewer reads them.

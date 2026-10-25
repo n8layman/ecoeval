@@ -61,17 +61,18 @@ mod_load_ui <- function(id) {
     ),
     eco_panel(
       "The schema",
-      paste("Required. It drives comparator defaults, the enum conformance",
-            "check, and the default linkage-field suggestion."),
+      paste("Required. It sets how each column is compared by default,",
+            "which values each column allows, and which columns identify a",
+            "record."),
       file_picker(ns, "schema", "schema.json",
                   "The schema the AI extracted against.")
     ),
     eco_panel(
       "The paper lists (optional)",
-      paste("Papers processed and papers reviewed, as distinct from records",
-            "found. These widen scope; they do not change how anything is",
-            "scored. For an ecoextract database the AI list is free -- it is",
-            "the documents table."),
+      paste("Every paper each side looked at, including papers where it found",
+            "nothing. With these, papers that one side found nothing in are",
+            "compared too. For an ecoextract database the extraction's list",
+            "is read from its documents table, so you can leave it empty."),
       fluidRow(
         column(6, file_picker(ns, "ai_papers", paste("Papers processed:", lab()$ai),
                               accept_tables = TRUE)),
@@ -143,9 +144,9 @@ mod_load_server <- function(id, rv) {
       if (is.null(path) || !nzchar(path) ||
           !tolower(fs::path_ext(path)) %in% c("db", "sqlite", "sqlite3")) return(NULL)
       div(class = "eco-note",
-          "This looks like a database. If you leave the AI paper list empty,",
-          "ecoeval will use its documents table -- which knows every paper",
-          "processed, including the ones that produced no records.")
+          "This looks like a database. If you leave the paper list empty,",
+          "ecoeval reads it from the documents table, which lists every paper",
+          "processed, including those with no records.")
     })
 
     # ---- the bundled example ----------------------------------------------

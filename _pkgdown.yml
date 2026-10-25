@@ -192,6 +192,7 @@ reference:
       - confusion_totals
       - paper_field_outcomes
       - record_field_outcomes
+      - filter_record_rows
       - progress_summary
       - suspect_pairs
 

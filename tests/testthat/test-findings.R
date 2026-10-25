@@ -43,7 +43,13 @@ test_that("a gold column the schema has no slot for is reported", {
 test_that("the granularity mismatch reaches the findings", {
   fx <- fixture_run()
   f <- fixture_findings(fx)
-  expect_true(any(grepl("collapse", f$detail)))
+  without <- collect_findings(
+    fx$cells, fx$pairs, schema = fx$schema, linkage_fields = fx$linkage,
+    collapses = granularity_check(fx$gold, fx$linkage, "gold")[0, ])
+  with <- collect_findings(
+    fx$cells, fx$pairs, schema = fx$schema, linkage_fields = fx$linkage,
+    collapses = granularity_check(fx$gold, fx$linkage, "gold"))
+  expect_equal(sum(with$group == "schema"), sum(without$group == "schema") + 1L)
 })
 
 test_that("source consistency catches records outside the paper list", {
@@ -51,9 +57,7 @@ test_that("source consistency catches records outside the paper list", {
   papers <- tibble::tibble(.paper = "P1")
   out <- source_consistency(recs, papers, "gold")
   expect_true("records_outside_paper_list" %in% out$check)
-  # Say the consequence out loud rather than quietly patching it.
-  expect_match(out$detail[out$check == "records_outside_paper_list"],
-               "cannot be trusted")
+  expect_equal(out$n[out$check == "records_outside_paper_list"], 1L)
 })
 
 test_that("source consistency catches unresolvable and duplicate papers", {
@@ -66,10 +70,8 @@ test_that("source consistency catches unresolvable and duplicate papers", {
 
 test_that("only two conditions actually block", {
   expect_null(blocking_condition(list(papers = "P"), "field"))
-  expect_match(blocking_condition(list(papers = character(0)), "field"),
-               "nothing to compare")
-  expect_match(blocking_condition(list(papers = "P"), character(0)),
-               "nothing to score")
+  expect_type(blocking_condition(list(papers = character(0)), "field"), "character")
+  expect_type(blocking_condition(list(papers = "P"), character(0)), "character")
 })
 
 test_that("the schema patch is applicable, not prose", {

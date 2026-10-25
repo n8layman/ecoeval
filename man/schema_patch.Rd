@@ -23,7 +23,7 @@ element per field, an optional \code{x-unique-fields} note, and
 \code{description_review} for columns that look ambiguous.
 }
 \description{
-Schema findings emit an applicable patch, not prose. This closes the loop
-mechanically instead of leaving the user to translate a dashboard into
-schema edits by hand.
+Turns the schema findings into a list of proposed edits to apply to the
+schema: values to add to enums, fields whose descriptions may be unclear,
+and identity fields that need another field.
 }

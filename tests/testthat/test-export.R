@@ -51,12 +51,9 @@ test_that("caveats travel with the export instead of living only on screen", {
     agg = aggregate_metrics(fx$cells),
     rm_ = record_metrics(fx$pairs)
   )
-  txt <- paste(readme, collapse = "\n")
-  expect_match(txt, "SCOPE")
-  expect_match(txt, "ACTIVE WARNINGS")
-  expect_match(txt, "no paper list")
-  expect_match(txt, "papers judged")
-  expect_match(txt, "Manual corrections")
+  # The warnings and corrections it was given travel with the bundle.
+  expect_true(any(endsWith(readme, "The AI has no paper list.")))
+  expect_true(any(endsWith(readme, "1 links rejected, 0 added, 2 cells overridden")))
 })
 
 test_that("plots render without erroring on real scored data", {

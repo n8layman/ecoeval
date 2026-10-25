@@ -15,6 +15,7 @@ plot_threshold(profile, threshold = 0.85)
 A ggplot.
 }
 \description{
-The best of Splink's charts, and the reason it is worth borrowing: it lets a
-user place a fuzzy cutoff by looking at their own data rather than guessing.
+Shows how similar a column's values are across the matched pairs, so a
+fuzzy cutoff can be chosen from the data. Adapted from Splink's chart of
+the same name.
 }

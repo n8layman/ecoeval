@@ -49,17 +49,12 @@ is_compared <- function(state) {
 
 #' The four outcomes a reader acts on
 #'
-#' Seven cell states, four things a person actually does something about: the
-#' two sides agree, they conflict, only the gold standard has a value, or only
-#' the AI does.
+#' Maps the seven cell states to four outcomes: the two sides agree, they
+#' differ, only the gold standard has a value, or only the AI does.
 #'
-#' Two collapses do the work. Whether a one-sided value came from an unpaired
-#' record or from a blank in a paired one is a detail of the alignment, not of
-#' the finding -- both mean "one side has this and the other does not". And a
-#' column **neither** side filled in is agreement: they agree there is nothing
-#' there. That keeps the scheme to four colours, and it keeps them honest --
-#' green means "nothing to fix here", which is exactly what a mutually empty
-#' column is.
+#' A value on only one side gets the same outcome whether its record is
+#' unpaired or its partner left the cell blank. A cell **neither** side filled
+#' in counts as agreement, so it is green: there is nothing to fix.
 #'
 #' Colour is not the accounting. A both-blank cell is still a true negative in
 #' [state_contributions()] and still drops out of accuracy, precision and
@@ -110,9 +105,8 @@ outcome_labels <- function(labels = current_labels()) {
 #' Fill carries agreement, through [cell_outcome()], so the comparison grid and
 #' the overview heatmap say the same thing with the same colours. Grey is the
 #' one cell that compared nothing: no record on one side, no value on the
-#' other. Schema
-#' violations are marked, not coloured -- validity is orthogonal to match
-#' state, and a cell can be both.
+#' other. Values the schema does not allow are marked with a dot instead of a
+#' colour, so a cell can show both.
 #'
 #' @param state A character vector of cell states.
 #' @return A character vector of colour names.
@@ -146,7 +140,7 @@ prf <- function(tp, fp, fn) {
 #' @param cells A cell tibble from [score_cells()].
 #' @return A tibble with `field`, `tp`, `fp`, `fn`, `tn`, `n_scored`,
 #'   `accuracy`, `precision`, `recall`, `f1`, `n_pending`, `n_overridden`,
-#'   sorted worst accuracy first -- the triage order.
+#'   sorted worst accuracy first.
 #' @export
 field_metrics <- function(cells) {
   if (!nrow(cells)) {
@@ -177,12 +171,12 @@ field_metrics <- function(cells) {
 
 #' Record-level metrics
 #'
-#' Did the AI find the right rows? Matching is 1:1 and leftovers are false
-#' positives and false negatives, because that is what they are.
+#' Did the AI find the right rows? Each record is paired at most once, and
+#' records left over count as false positives and false negatives.
 #'
-#' Unlike the field metrics, these are **not** robust to alignment error --
-#' pairing two records converts 1 FP + 1 FN into 1 TP, which is exactly the
-#' judgment the human review exists for.
+#' A wrong pairing changes these numbers more than the field metrics: pairing
+#' two records turns one false positive and one false negative into one true
+#' positive. Reviewing the pairings by hand catches that.
 #'
 #' @param pairs A pair tibble from [align_records()].
 #' @return A one-row tibble with `tp`, `fp`, `fn`, `precision`, `recall`, `f1`.
@@ -216,13 +210,11 @@ aggregate_metrics <- function(cells) {
 
 #' Per-column confusion matrix
 #'
-#' The form adapts to the column's type, because a K-by-K matrix over thousands
-#' of species names is useless:
+#' The matrix depends on the column's type:
 #'
-#' * **enum / boolean / low cardinality** -- a true K-by-K, gold class by AI
-#'   class, with an explicit "not in schema" row and column so out-of-enum
-#'   values appear rather than being silently dropped. Those are among the most
-#'   interesting cells on the chart.
+#' * **enum / boolean / low cardinality** -- each gold value against each AI
+#'   value, with a "not in schema" row and column so values outside the
+#'   schema's list are shown.
 #' * **free text / high cardinality** -- 2-by-2 on presence and absence, with
 #'   the populated-by-both cell split into "correct" and "wrong value". That
 #'   split separates *didn't populate the field* from *populated it wrong*,
@@ -376,9 +368,9 @@ schema_type_of <- function(schema, field) {
 
 #' Fill rates for both sources, side by side
 #'
-#' Feeds the completeness chart and the fill-rate asymmetry finding: a field
-#' humans always populate and the AI rarely does is usually a field-description
-#' problem, not a model failure.
+#' Feeds the completeness chart and the fill-rate finding. If humans almost
+#' always fill in a field and the AI rarely does, the field's description
+#' usually needs work.
 #'
 #' @param cells A cell tibble from [score_cells()].
 #' @return A tibble with `field`, `ai_fill`, `gold_fill`, `gap`, sorted by the
@@ -403,11 +395,11 @@ fill_rates <- function(cells) {
   dplyr::arrange(out, dplyr::desc(abs(.data$gap)))
 }
 
-#' Review progress, in the three states that matter
+#' Review progress
 #'
-#' Distinguishing them is honest about how the numbers were produced:
-#' *unjudged* means only the cheap comparator rungs ran, *judged* means the LLM
-#' settled the contested cells, *reviewed* means a person looked at it.
+#' Says how the numbers were produced. *Unjudged* means only the plain
+#' comparisons ran, *judged* means the AI reviewer settled the cells they
+#' could not, and *reviewed* means a person looked at the paper.
 #'
 #' @param cells A cell tibble from [score_cells()].
 #' @param papers Character vector of papers in scope.
@@ -536,11 +528,10 @@ confusion_totals <- function(cells, field = NULL, labels = current_labels()) {
 #'
 #' A tile covers every row of that paper's comparison for that column -- a
 #' matched AI-and-gold pair is one row, an unmatched record from either side is
-#' one row -- so it usually summarises several cells. That is exactly why the
-#' overview cannot use the four outcome colours: they describe **one cell**, and
-#' a tile holding nine agreements and one disagreement would paint the same as
-#' one holding ten disagreements. `agreement` is what aggregates honestly, and
-#' `outcome` is kept only for the tiles where every cell says the same thing.
+#' one row -- so it usually summarises several cells. The four outcome colours
+#' describe one cell each, so the overview shades tiles by `agreement` instead.
+#' `outcome` is filled in only for tiles where every cell has the same
+#' outcome.
 #'
 #' `agreement` is `n_agree / n_scored`, the same definition as
 #' [field_metrics()]'s accuracy, so the map and the numbers under it cannot
@@ -686,16 +677,53 @@ record_field_outcomes <- function(cells, paper, fields = NULL,
   dplyr::arrange(out, match(.data$pair_id, ids), .data$field)
 }
 
+#' Narrow a paper's grid to the rows worth looking at
+#'
+#' View-only: a row left out is still scored, still in the metrics, and still
+#' in the export. Rows are kept or dropped whole -- every tile of a record, or
+#' none -- and each filter narrows what the others leave.
+#'
+#' @param outcomes A tibble from [record_field_outcomes()].
+#' @param kinds The record kinds to keep, of `"matched"`, `"AI only"`, and
+#'   `"gold only"`. `NULL` keeps all three.
+#' @param hide_agreeing Leave out rows where every cell agrees or is blank on
+#'   both sides. A row with a schema violation is kept regardless.
+#' @param violations The `pair_id`s with a value that fails schema validation.
+#' @param pairs When not `NULL`, keep only these `pair_id`s -- the suspect
+#'   links from [suspect_pairs()], say.
+#' @param text Keep rows where a value on either side contains this text,
+#'   ignoring case. `""` keeps every row.
+#' @return `outcomes` without the rows left out.
+#' @export
+filter_record_rows <- function(outcomes, kinds = NULL, hide_agreeing = FALSE,
+                               violations = character(0), pairs = NULL,
+                               text = "") {
+  keep <- rep(TRUE, nrow(outcomes))
+  if (!is.null(kinds)) keep <- keep & outcomes$kind %in% kinds
+  if (!is.null(pairs)) keep <- keep & outcomes$pair_id %in% pairs
+  if (isTRUE(hide_agreeing)) {
+    open <- outcomes$pair_id[!outcomes$state %in% c("agree", "blank")]
+    keep <- keep & outcomes$pair_id %in% c(open, violations)
+  }
+  text <- tolower(trimws(text %||% ""))
+  if (nzchar(text)) {
+    cols <- c("label", "ai_value", "gold_value", "ai_original", "gold_original")
+    hit <- Reduce(`|`, lapply(cols, function(col) {
+      grepl(text, tolower(outcomes[[col]]), fixed = TRUE)
+    }))
+    keep <- keep & outcomes$pair_id %in% outcomes$pair_id[hit]
+  }
+  outcomes[keep, , drop = FALSE]
+}
+
 #' Pairings that look wrong
 #'
-#' Two cheap signals, both strong. A pair that agrees on **nothing** is almost
-#' certainly two unrelated records the matcher joined. A pair that disagrees on
-#' every **identity column** is the subtler case: it may agree on incidentals
-#' like country and year while the fields that establish which record this
-#' actually is all disagree.
+#' Flags a matched pair in two cases. A pair that agrees on **nothing** is
+#' almost certainly two unrelated records joined by the matcher. A pair that
+#' disagrees on every **identity column** may still agree on other columns like
+#' country and year, but the columns that say which record it is all disagree.
 #'
-#' This is what turns "review all 47 papers or none" into "look at these
-#' three", and it is the bridge between the fast path and the review path.
+#' Use it to pick which papers to review by hand.
 #'
 #' @param cells A cell tibble from [score_cells()].
 #' @param linkage_fields The identity columns, from the comparator config.

@@ -21,20 +21,20 @@ run <- evaluate_extraction(
 )
 ```
 
-## One unified accounting
+## How each cell is counted
 
-Computed over the **entire set** — every record from both sides, matched or not.
-Per column, each cell contributes:
+The metrics are computed over **every record from both sides**, paired or not.
+In each column, each cell counts as:
 
 ```{r}
 state_contributions()
 ```
 
-Reading those states:
+What the states mean:
 
 | State                     | Outcome            | Colour | Meaning                                       |
 | ------------------------- | ------------------ | ------ | --------------------------------------------- |
-| `agree`                   | agree              | green  | matched pair, values agree under the comparator |
+| `agree`                   | agree              | green  | matched pair, values agree under the comparison |
 | `disagree`                | disagree           | purple | matched pair, values differ                   |
 | `ai_missing`              | only in the gold   | yellow | matched pair, the AI left it blank            |
 | `gold_only`               | only in the gold   | yellow | gold record with no counterpart               |
@@ -42,38 +42,34 @@ Reading those states:
 | `ai_only`                 | only in the AI     | orange | AI record with no counterpart                 |
 | `blank`                   | agree              | green  | neither side has a value                      |
 
-Seven states, four colours. Whether a one-sided value came from an unpaired
-record or from a blank on one side of a paired one is a detail of the
-*alignment*, not of the finding, so `cell_outcome()` collapses them; and a
-column neither side filled in is agreement about absence. The per-paper
-heatmap and the exported table paint the result the same way. The overview on
-the dashboard cannot: its tiles cover several records at once, so it shades the
-share that agree rather than claiming one of these four.
+There are seven states and four colours. A value on only one side gets the same
+colour whether its record is unpaired or its partner left the cell blank;
+`cell_outcome()` groups them that way. A column neither side filled in is
+coloured as agreement. The per-paper heatmap and the exported table use these
+colours. The overview on the dashboard covers several records per tile, so it
+shades each tile by the share of cells that agree instead.
 
-The colours are not the accounting: a `blank` cell is a **true negative** and
-drops out of accuracy, precision and recall entirely, as the table above shows.
-It reads as agreement and counts as nothing.
+A `blank` cell is coloured green but counts as a **true negative**, which is
+left out of accuracy, precision and recall, as the table above shows. A field
+neither side filled in says nothing about how well the extraction did.
 
-A disagreement counts as **both** a false positive and a false negative. That's
-the standard multi-class treatment: a misclassification is a false positive for
-the value asserted and a false negative for the value missed.
+A disagreement counts as **both** a false positive and a false negative. This is
+the standard treatment for classification with more than two classes: a wrong
+value is a false positive for the value given and a false negative for the
+value missed.
 
-Cells blank on both sides are true negatives and drop out of precision and
-recall, because a field neither party filled in says nothing about extraction
-quality.
+## Counting the colours gives the confusion matrix
 
-## The colours are the accounting
-
-Every cell is one of five things, and the dashboard's four colours are exactly
-those boxes, so counting the colours *is* computing the confusion matrix.
+Every cell falls in one of five boxes, and the dashboard's four colours match
+those boxes. Counting the colours gives the confusion matrix.
 
 ```{r}
 ct <- confusion_totals(run$cells)
 ct$by_outcome[, c("outcome", "colour", "n", "tp", "fp", "fn", "tn")]
 ```
 
-Which ties out with the per-field accounting by construction — both are
-`state_contributions()` summed, so there is no second calculation to drift:
+These totals match the per-field metrics, because both are sums of
+`state_contributions()`:
 
 ```{r}
 fm <- field_metrics(run$cells)
@@ -81,11 +77,12 @@ c(tp = ct$tp - sum(fm$tp), fp = ct$fp - sum(fm$fp), fn = ct$fn - sum(fm$fn))
 c(accuracy = ct$accuracy, precision = ct$precision, recall = ct$recall, f1 = ct$f1)
 ```
 
-## The property the accounting rests on
+## Wrong pairings and the field metrics
 
-A wrongly linked pair that disagrees on everything produces FP + FN per
-column — **exactly the same as leaving those rows unlinked**, where the AI-only
-row gives FP and the gold-only row gives FN.
+A wrongly linked pair that disagrees on everything counts a false positive and
+a false negative in each column. Leaving the two records unpaired gives the
+same counts: the AI-only record gives the false positive and the gold-only
+record gives the false negative.
 
 ```{r}
 ai   <- tibble::tibble(.rid = "a1", .paper = "P", v = "alpha", w = "one")
@@ -107,63 +104,57 @@ identical(
 )
 ```
 
-So linking earns nothing except where fields genuinely agree, and bad links
-cannot inflate field accuracy. **Field-level metrics are largely robust to
-alignment error.** Record-level metrics are not — pairing two records converts
-1 FP + 1 FN into 1 TP — which is exactly the judgment the human review exists
-for.
+So a link only changes the field metrics where the fields actually agree, and a
+bad link can't raise field accuracy. **A wrong pairing barely moves the
+field-level metrics.** It does move the record-level metrics, because pairing
+two records turns one false positive and one false negative into one true
+positive. Reviewing the pairings by hand is how you catch that.
 
-## Two confusion matrices, both about extraction
+## Two confusion matrices, both about the extraction
 
-Plainly labelled. There is no third matrix about linkage quality; users
-shouldn't have to learn that distinction.
-
-**Records** — did the AI find the right rows?
+**Records**: did the AI find the right rows?
 
 ```{r}
 record_metrics(run$pairs)
 ```
 
-**Fields** — did it fill them in correctly?
+**Fields**: did it fill them in correctly?
 
 ```{r}
 field_metrics(run$cells)[, c("field", "tp", "fp", "fn", "n_scored", "accuracy")]
 ```
 
-Sorted worst accuracy first, which is the triage order. But read it carefully: a
-column that is uniformly wrong has three possible causes and the tool can't tell
-them apart.
+The table is sorted worst accuracy first. If a column is wrong almost
+everywhere, there are three possible causes, and the numbers can't tell them
+apart:
 
-1. **A misconfigured comparator** — exact matching on a date column with two
-   formats, or a fuzzy threshold set too tight. On a first run this is the most
-   likely explanation, and the cheapest to check.
-2. **An ambiguous field description** — the prompt didn't pin down what to put
+1. **The comparison is set up wrong**, such as exact matching on a date column
+   with two formats, or a fuzzy cutoff set too high. On a first run this is the
+   most likely cause, and the quickest to check.
+2. **The field's description is unclear**, so the prompt didn't say what to put
    there.
-3. **The model genuinely failing** on that field.
+3. **The model gets that field wrong.**
 
-Check them in that order. The chart tells you *where* to look, not why.
+Check them in that order. The table shows you where to look, not why.
 
-## The two aggregates
-
-Two numbers, plain labels — no micro/macro jargon.
+## The two overall numbers
 
 ```{r}
 aggregate_metrics(run$cells)
 ```
 
-`overall_accuracy` weighs every scored cell the same; `column_mean_accuracy`
-weighs every column the same. They diverge when fill rates are uneven, and the
-gap is itself informative.
+`overall_accuracy` gives every scored cell the same weight, and
+`column_mean_accuracy` gives every column the same weight. They differ when
+some columns are filled in much more often than others, and the size of the
+difference is worth looking at.
 
-## Column-level matrices
+## Matrices for one column
 
-The form adapts to the column's type, because a K×K matrix over thousands of
-species names is useless.
+The matrix for a column depends on its type.
 
-**Enum, boolean, or low cardinality** → a true K×K, gold class by AI class, with
-an explicit `(not in schema)` row and column so out-of-enum values appear rather
-than being silently dropped. Those are among the most interesting cells on the
-chart.
+**A fixed list of values, a yes/no, or few distinct values**: a table of each
+gold value against each AI value, with a `(not in schema)` row and column so
+values outside the schema's list are shown.
 
 ```{r}
 cc <- column_confusion(run$cells, "interaction_type", run$schema)
@@ -171,10 +162,10 @@ cc$type
 subset(cc$matrix, n > 0)
 ```
 
-**Free text or high cardinality** → 2×2 on presence and absence, with the
-populated-by-both cell **split into "correct" and "wrong value"**. That split is
-what makes it useful: it separates *didn't populate the field* from *populated
-it wrong*, which have entirely different causes.
+**Free text, or many distinct values**: a two-by-two table of whether each side
+has a value, with the cell where both do **split into "correct" and "wrong
+value"**. That split separates a field the AI left empty from a field it filled
+in wrongly, which have different causes.
 
 ```{r}
 cc <- column_confusion(run$cells, "all_supporting_source_sentences", run$schema)
@@ -182,68 +173,64 @@ cc$type
 cc$matrix
 ```
 
-**Numeric or date** → presence and absence plus an error distribution.
+**Numbers or dates**: whether each side has a value, plus how far off the
+values are.
 
 ```{r}
 cc <- column_confusion(run$cells, "sample_size", run$schema)
 cc$errors
 ```
 
-Each result carries `notes` — cautions such as one class dominating (accuracy is
-then trivially high and uninformative) or too few matched records to mean
-anything.
+Each result has `notes` with cautions, such as one value making up most of the
+column (so accuracy is high without meaning much) or too few matched records to
+draw conclusions.
 
 ## Fill rates
 
-Per-column fill rates for both sources, side by side. A field humans always
-populate and the AI rarely does is usually a field-description problem, not a
-model failure — which is why it lands in the *schema* group of the findings, not
-the *model* group.
+How often each side fills in each column. If the humans almost always fill in a
+field and the AI rarely does, the field's description usually needs work. That's
+why this finding appears in the *schema* group of the findings, not the *model*
+group.
 
 ```{r}
 fill_rates(run$cells)
 ```
 
-## Schema conformance is not folded into anything
+## Schema conformance
 
-Validate both sides against the schema, warn, mark the offending cells, and stop
-there. Scoring treats both sides at face value.
+ecoeval checks both sides against the schema, warns, and marks the cells with
+values the schema doesn't allow. Scoring uses both sides' values as they are.
 
 ```{r}
 subset(run$conformance, source == "gold")
 ```
 
-- **AI side** — an invalid value is simply a **true error**, scored as wrong like
-  any other. Structured output should have prevented it, so it's also worth
-  flagging as a pipeline problem, but it needs no special accounting.
-- **Gold side** — you go and fix your gold standard. Not something the tool
-  models.
+- **AI side**: an invalid value is scored as wrong, like any other error.
+  Structured output should prevent these, so they're also worth checking in the
+  extraction pipeline.
+- **Gold side**: fix the value in your gold standard.
 
-No ceiling arithmetic, no reclassification, no confirmation flow. The counts do
-the work: `commensalism` appearing three times is a category the schema is
-missing; `predatoin` appearing once is a typo. The two have opposite fixes.
+The counts tell you what to do. `commensalism` appearing three times probably
+needs adding to the schema. `predatoin` appearing once is a typo.
 
-Schema violations are **marked, not coloured**. Validity is
-orthogonal to match state, a cell can be both, and either side's value (or both)
-may be the offender. Fill carries agreement; the marker carries validity.
+In the grid, a value the schema doesn't allow is marked with a dot instead of a
+different colour. The colour shows whether the two sides agree, the dot shows
+whether a value is allowed, and a cell can have both.
 
-## Honest reporting
+## How the numbers were produced
 
-The dashboard distinguishes three progress states, because they mean different
-things:
+The dashboard reports three kinds of progress:
 
-| State        | Meaning                                                  |
-| ------------ | -------------------------------------------------------- |
-| **Unjudged** | cheap comparator rungs only; contested cells unresolved  |
-| **Judged**   | the LLM settled the contested cells                      |
-| **Reviewed** | a person looked at it                                    |
+| State        | Meaning                                                           |
+| ------------ | ----------------------------------------------------------------- |
+| **Unjudged** | only the plain comparisons have run; some cells aren't settled    |
+| **Judged**   | the AI reviewer has settled the cells the plain comparisons couldn't |
+| **Reviewed** | a person has looked at the paper                                  |
 
 ```{r}
 progress_summary(run$cells, run$scope$papers)
 ```
 
-*"47 of 47 papers judged · 3 reviewed"* is an honest description of a fast-path
-result, and it tells a later reader exactly how the numbers were produced
-without editorialising about it. It travels with the export, in `README.txt`,
-alongside the scope statement and any active warnings — so the caveats don't
-live only on screen.
+A line like *"47 of 47 papers judged · 3 reviewed"* tells a later reader how
+the numbers were produced. It's included in the export's `README.txt`, along
+with which papers were compared and any warnings.

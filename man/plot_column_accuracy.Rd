@@ -13,9 +13,7 @@ plot_column_accuracy(fm)
 A ggplot.
 }
 \description{
-The triage view -- but read it carefully. A column that is uniformly wrong
-has three possible causes and the chart cannot tell them apart: a
-misconfigured comparator, an ambiguous field description, or the model
-genuinely failing. Check them in that order; the chart says \emph{where} to look,
-not why.
+If a column is wrong almost everywhere, check these in order: how the
+column is compared, then the field's description in the schema, then the
+model itself. The chart shows where to look, not which of these it is.
 }

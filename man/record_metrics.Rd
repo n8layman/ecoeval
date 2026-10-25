@@ -13,11 +13,11 @@ record_metrics(pairs)
 A one-row tibble with \code{tp}, \code{fp}, \code{fn}, \code{precision}, \code{recall}, \code{f1}.
 }
 \description{
-Did the AI find the right rows? Matching is 1:1 and leftovers are false
-positives and false negatives, because that is what they are.
+Did the AI find the right rows? Each record is paired at most once, and
+records left over count as false positives and false negatives.
 }
 \details{
-Unlike the field metrics, these are \strong{not} robust to alignment error --
-pairing two records converts 1 FP + 1 FN into 1 TP, which is exactly the
-judgment the human review exists for.
+A wrong pairing changes these numbers more than the field metrics: pairing
+two records turns one false positive and one false negative into one true
+positive. Reviewing the pairings by hand catches that.
 }
