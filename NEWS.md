@@ -1,3 +1,14 @@
+# ecoeval 0.7.0
+
+* Add up offers every numeric column of the extraction, as in ecoreview:
+  compared fields whose values are numbers, and columns that are not compared
+  at all, such as a permitted quantity the reference has no column for. A text
+  column holding only digits counts. ID columns and the paper key are left out.
+  A column that is not compared is added up but not scored, and its total for
+  a rolled-up row shows in the cell pop-up. `summable_columns()` lists them.
+* The Group by and Add up boxes are wide enough for long field names, in the
+  box and in its list.
+
 # ecoeval 0.6.0
 
 * The extraction can be rolled up before matching, for when it records papers

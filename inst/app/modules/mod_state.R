@@ -305,6 +305,23 @@ member_records <- function(rv, rid) {
   rv$rollup_records[match(rids, rv$rollup_records$.rid), , drop = FALSE]
 }
 
+#' The columns the roll-up can add up; see summable_columns()
+summable_cols <- function(rv, cfg = rv$comparators) {
+  if (is.null(rv$ai_raw)) return(character(0))
+  ecoeval::summable_columns(rv$ai_raw, cfg, exclude = rv$ai_paper_key$columns)
+}
+
+#' Totals of the added-up columns that are not compared, for a rolled-up row
+rollup_totals <- function(rv, rid) {
+  m <- rv$rollup_members
+  if (is.null(m) || is.na(rid) || !rid %in% m$.rid) return(NULL)
+  cols <- setdiff(rv$rollup$sum, scored_fields(rv))
+  cols <- intersect(cols, names(rv$ai_shown))
+  if (!length(cols)) return(NULL)
+  i <- match(rid, rv$ai_shown$.rid)
+  vapply(cols, function(col) as.character(rv$ai_shown[[col]][[i]]), character(1))
+}
+
 #' Whether the LLM steps are allowed to run
 llm_allowed <- function(rv) !identical(rv$judge_mode, "off")
 

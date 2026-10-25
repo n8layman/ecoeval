@@ -153,3 +153,11 @@ table.dataTable thead th { font-size: 11.5px; font-weight: 620; }
 .eco-row-filters .eco-filter-gap { width: 1px; height: 20px; background: var(--eco-line); }
 .eco-row-filters .eco-filter-label { font-weight: 600; color: var(--eco-ink); }
 .eco-row-filters .eco-suspect-btn { padding: 3px 10px; }
+
+/* ---- roll-up controls ---- */
+
+/* The filter row sizes its inputs to their content; the roll-up boxes need
+   room for field names like wildlife_description, in the box and its list. */
+.eco-rollup-bar .selectize-control { min-width: 260px; }
+.eco-rollup-bar .selectize-dropdown { min-width: 260px; width: auto !important; }
+.eco-rollup-bar .selectize-dropdown-content .option { white-space: nowrap; }
